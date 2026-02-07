@@ -5,6 +5,8 @@
 //  Created by JAG on 1/27/26.
 //
 
+import SwiftUI
+
 struct VoiceVisualizer: View {
     let amplitudes: [CGFloat]
 

@@ -24,6 +24,11 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
     private var lastRecordingURL: URL?
     private var whisper: WhisperKit? // Keep instance alive to avoid reloading model
     
+    // Voice Visualizer Properties
+    @Published var amplitudes: [CGFloat] = Array(repeating: 0.1, count: 5)
+    private var audioRecorder: AVAudioRecorder?
+    private var timer: Timer?
+    
     func checkPermissions() {
         // Microphone Check
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
@@ -136,19 +141,56 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
                 return
             }
             
+            statusMessage = "Extracting audio..."
+            
+            // Extract audio from the .mov file to a format WhisperKit can handle
+            guard let audioURL = try await extractAudio(from: url) else {
+                statusMessage = "Failed to extract audio"
+                return
+            }
+            
             statusMessage = "Transcribing (this may take a moment)..."
             
-            // WhisperKit expects audio. If passing a .mov fails, you may need to extract audio
-            // using AVAssetExportSession first. Assuming WhisperKit handles extraction here:
-            let result = try await whisper.transcribe(audioPath: url.path)
+            let result = try await whisper.transcribe(audioPath: audioURL.path)
             let transcriptText = result.first?.text ?? "No text found"
             
-            saveTranscript(text: transcriptText)
+            saveTranscript(text: transcriptText, videoURL: url)
+            
+            // Clean up the extracted audio file
+            try? FileManager.default.removeItem(at: audioURL)
             
         } catch {
             statusMessage = "Processing failed: \(error.localizedDescription)"
             isRecording = false
         }
+    }
+    
+    // MARK: - Audio Extraction
+    private func extractAudio(from videoURL: URL) async throws -> URL? {
+        let asset = AVURLAsset(url: videoURL)
+        
+        // Check if the asset has audio tracks
+        guard try await asset.load(.tracks).contains(where: { $0.mediaType == .audio }) else {
+            statusMessage = "No audio track found in recording"
+            return nil
+        }
+        
+        // Create output URL for the extracted audio
+        let outputURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("extracted_audio.m4a")
+        
+        // Remove existing file if present
+        try? FileManager.default.removeItem(at: outputURL)
+        
+        // Create export session using modern API
+        guard let exportSession = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetAppleM4A) else {
+            throw NSError(domain: "MeetingManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to create export session"])
+        }
+        
+        // Export the audio using the modern async API
+        try await exportSession.export(to: outputURL, as: .m4a)
+        
+        return outputURL
     }
 
     // MARK: - Bookmark Logic
@@ -185,29 +227,11 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
             print("Failed to load bookmark: \(error)")
         }
     }
-    
-    struct VoiceVisualizer: View {
-        let amplitudes: [CGFloat]
 
-        var body: some View {
-            HStack(spacing: 4) {
-                ForEach(0..<amplitudes.count, id: \.self) { index in
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color.gray.opacity(0.8))
-                        // This creates the moving "pill" effect
-                        .frame(width: 4, height: 20 * amplitudes[index])
-                }
-            }
-            .frame(height: 30) // Fixed container height
-        }
-    }
 
     // MARK: - Save Logic
-    func saveTranscript(text: String) {
+    func saveTranscript(text: String, videoURL: URL? = nil) {
         guard let folderURL = savedFolderURL else { return }
-
-        
-        let success = folderURL.startAccessingSecurityScopedResource()
         
         // CRITICAL: Check the boolean return value
         guard folderURL.startAccessingSecurityScopedResource() else {
@@ -217,27 +241,33 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
         
         // Defer ensures we stop accessing even if we throw or return early
         defer {
-            if success {
-                folderURL.stopAccessingSecurityScopedResource()
-            }
+            folderURL.stopAccessingSecurityScopedResource()
         }
         
-        if success {
-            let filename = "meeting-\(Date().formatted(date: .numeric, time: .shortened))"
-                .replacingOccurrences(of: "/", with: "-")
-                .replacingOccurrences(of: ":", with: "-")
-            + ".md"
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyyMMdd:HHmmss"
+        let timestamp = dateFormatter.string(from: Date())
+        let baseFilename = "meeting-\(timestamp)"
+        
+        // Save the transcript
+        let transcriptFilename = "\(baseFilename).md"
+        let transcriptFileURL = folderURL.appendingPathComponent(transcriptFilename)
+        
+        do {
+            try text.write(to: transcriptFileURL, atomically: true, encoding: .utf8)
             
-            let fileURL = folderURL.appendingPathComponent(filename)
-            
-            do {
-                try text.write(to: fileURL, atomically: true, encoding: .utf8)
-                statusMessage = "Transcript Saved to \(filename)"
-            } catch {
-                statusMessage = "Write failed: \(error.localizedDescription)"
+            // Save the video file if provided
+            if let videoURL = videoURL {
+                let videoFilename = "\(baseFilename).mov"
+                let videoFileURL = folderURL.appendingPathComponent(videoFilename)
+                
+                try FileManager.default.copyItem(at: videoURL, to: videoFileURL)
+                statusMessage = "Saved \(transcriptFilename) and \(videoFilename)"
+            } else {
+                statusMessage = "Transcript Saved to \(transcriptFilename)"
             }
-        } else {
-                statusMessage = "System denied access to the folders."
+        } catch {
+            statusMessage = "Save failed: \(error.localizedDescription)"
         }
     }
     
@@ -252,11 +282,6 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
 }
 
 extension MeetingManager {
-    // Add these properties to your class
-    @Published var amplitudes: [CGFloat] = Array(repeating: 0.1, count: 5)
-    private var audioRecorder: AVAudioRecorder?
-    private var timer: Timer?
-
     func startMonitoring() {
         let settings = [
             AVFormatIDKey: Int(kAudioFormatAppleLossless),
@@ -296,3 +321,15 @@ extension MeetingManager {
         amplitudes = Array(repeating: 0.1, count: 5)
     }
 }
+
+#Preview {
+    @Previewable @State var manager = MeetingManager()
+    
+    Button("Stop & Transcribe") {
+        Task {
+            await manager.stopAndTranscribe()
+        }
+    }
+    .padding()
+}
+
