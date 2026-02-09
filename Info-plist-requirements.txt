@@ -1,0 +1,39 @@
+Required Info.plist Entries for Live Speech-to-Text
+===================================================
+
+Add these entries to your Info.plist file (or in Xcode's Info tab):
+
+1. Microphone Access:
+   Key: NSMicrophoneUsageDescription
+   Value: This app needs microphone access to transcribe your meetings in real-time.
+
+2. Speech Recognition:
+   Key: NSSpeechRecognitionUsageDescription  
+   Value: This app uses speech recognition to transcribe your meetings as you speak.
+
+3. Screen Recording (already may be present):
+   Key: NSScreenCaptureUsageDescription
+   Value: This app records your screen to capture meeting content.
+
+
+How to add in Xcode:
+--------------------
+1. Select your project in the Project Navigator
+2. Select your target
+3. Go to the "Info" tab
+4. Click the "+" button to add a new key
+5. Start typing the key name (e.g., "NSMicrophoneUsageDescription")
+6. Xcode will autocomplete it
+7. Enter the description string in the Value field
+
+
+XML format (if editing Info.plist directly):
+--------------------------------------------
+<key>NSMicrophoneUsageDescription</key>
+<string>This app needs microphone access to transcribe your meetings in real-time.</string>
+
+<key>NSSpeechRecognitionUsageDescription</key>
+<string>This app uses speech recognition to transcribe your meetings as you speak.</string>
+
+<key>NSScreenCaptureUsageDescription</key>
+<string>This app records your screen to capture meeting content.</string>

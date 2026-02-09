@@ -32,18 +32,31 @@ struct ContentView: View {
                     manager.selectFolder()
                 }
             }
-            Spacer()
-            Text(manager.statusMessage)
             
-            // Voice visualizer - only show when recording
+            Divider()
+            
+            // Live Transcript Display
             if manager.isRecording {
-                VoiceVisualizer(amplitudes: manager.amplitudes)
-                    .transition(.opacity)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "record.circle.fill")
+                            .foregroundStyle(.red)
+                        Text("Recording in progress...")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    
+                    // Voice visualizer
+                    VoiceVisualizer(amplitudes: manager.amplitudes)
+                }
+                .transition(.opacity)
+            } else {
+                Spacer()
+                Text(manager.statusMessage)
+                Spacer()
             }
             
-            Spacer()
-            
-            Button(manager.isRecording ? "Stop" : "Start") {
+            Button(manager.isRecording ? "Stop & Save" : "Start Recording") {
                 Task {
                     if manager.isRecording {
                         await manager.stopAndTranscribe()
@@ -56,11 +69,11 @@ struct ContentView: View {
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 8)
-            .background(manager.isRecording ? Color.blue.opacity(0.1) : Color.clear)
+            .background(manager.isRecording ? Color.red.opacity(0.1) : Color.blue.opacity(0.1))
             .buttonStyle(.borderedProminent)
-            .tint(.blue)
+            .tint(manager.isRecording ? .red : .blue)
         }
         .padding(20)
-        .frame(width: 320, height: 240)
+        .frame(width: 400, height: 380)
     }
 }

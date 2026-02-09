@@ -3,6 +3,7 @@ import ScreenCaptureKit
 import WhisperKit
 import Combine
 import AVFoundation
+import Speech
 
 
 @MainActor
@@ -10,6 +11,7 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
     @Published var isRecording = false
     @Published var statusMessage = "Ready"
     @Published var savedFolderURL: URL?
+    @Published var liveTranscript = ""
     
     // Preferences
     @Published var shouldRecordCamera: Bool = UserDefaults.standard.bool(forKey: "pref_record_camera") {
@@ -23,6 +25,12 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
     private var recordingOutput: SCRecordingOutput?
     private var lastRecordingURL: URL?
     private var whisper: WhisperKit? // Keep instance alive to avoid reloading model
+    
+    // Speech Recognition Properties
+    private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
+    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
+    private var recognitionTask: SFSpeechRecognitionTask?
+    private var audioEngine: AVAudioEngine?
     
     // Voice Visualizer Properties
     @Published var amplitudes: [CGFloat] = Array(repeating: 0.1, count: 5)
@@ -41,6 +49,24 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
         default:
             break
         }
+        
+        // Speech Recognition Check
+        SFSpeechRecognizer.requestAuthorization { status in
+            Task { @MainActor in
+                switch status {
+                case .authorized:
+                    print("✅ Speech recognition authorized")
+                case .denied:
+                    self.statusMessage = "Speech recognition access denied."
+                case .restricted:
+                    self.statusMessage = "Speech recognition restricted."
+                case .notDetermined:
+                    print("⚠️ Speech recognition not determined")
+                @unknown default:
+                    break
+                }
+            }
+        }
 
         // Screen Recording Check (macOS 15+)
         if #available(macOS 14.0, *) {
@@ -53,13 +79,21 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
 
     override init() {
         super.init()
+        
+        print("🚀 MeetingManager init started")
+        
         loadSavedFolder()
+        print("✅ Folder loaded")
         
         // 1. Check permissions immediately on startup
         checkPermissions()
+        print("✅ Permissions check completed")
         
         // 2. Start loading the AI model in the background
         Task { await setupEngine() }
+        print("✅ WhisperKit setup started")
+        
+        print("✅ MeetingManager init completed")
     }
     
     
@@ -79,6 +113,16 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
     // MARK: - Recording Logic
     func start() async {
         statusMessage = "Starting..."
+        
+        // Check screen recording permission first
+        if #available(macOS 14.0, *) {
+            if !CGPreflightScreenCaptureAccess() {
+                statusMessage = "⚠️ Screen Recording permission required. Check System Settings → Privacy & Security → Screen Recording"
+                print("❌ Screen recording permission not granted")
+                return
+            }
+        }
+        
         do {
             let content = try await SCShareableContent.current
             guard let display = content.displays.first else {
@@ -121,49 +165,63 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
             try stream.addRecordingOutput(recordingOutput)
             try await stream.startCapture()
             
+            // Start live transcription
+            // TEMPORARILY DISABLED - Causes audio conflict with ScreenCaptureKit
+            // try startLiveTranscription()
+            
             isRecording = true
             statusMessage = "Recording..."
         } catch {
             statusMessage = "Error: \(error.localizedDescription)"
+            print("❌ Start error: \(error)")
         }
     }
     
     func stopAndTranscribe() async {
         statusMessage = "Stopping..."
         
+        // Stop live transcription FIRST
+        // TEMPORARILY DISABLED
+        // stopLiveTranscription()
+        
         do {
             try await stream?.stopCapture()
             isRecording = false
             
-            guard let url = lastRecordingURL else { return }
-            guard let whisper = self.whisper else {
-                statusMessage = "AI Model not loaded yet."
-                return
+            guard let videoURL = lastRecordingURL else { 
+                statusMessage = "No recording found"
+                return 
             }
+            
+            // TEMPORARY: Set default transcript
+            let transcriptText = "Recording completed - Transcription temporarily disabled to fix crash"
+            
+            print("💾 Saving transcript: \(transcriptText.count) characters")
             
             statusMessage = "Extracting audio..."
             
-            // Extract audio from the .mov file to a format WhisperKit can handle
-            guard let audioURL = try await extractAudio(from: url) else {
+            // Extract audio from the .mov file
+            guard let audioURL = try await extractAudio(from: videoURL) else {
                 statusMessage = "Failed to extract audio"
                 return
             }
             
-            statusMessage = "Transcribing (this may take a moment)..."
+            statusMessage = "Saving files..."
             
-            let result = try await whisper.transcribe(audioPath: audioURL.path)
-            let transcriptText = result.first?.text ?? "No text found"
+            // Save all three files: video, audio, and transcript
+            saveTranscript(text: transcriptText, videoURL: videoURL, audioURL: audioURL)
             
-            saveTranscript(text: transcriptText, videoURL: url)
-            
-            // Clean up the extracted audio file
+            // Clean up temporary files after successful save
+            try? FileManager.default.removeItem(at: videoURL)
             try? FileManager.default.removeItem(at: audioURL)
             
         } catch {
             statusMessage = "Processing failed: \(error.localizedDescription)"
+            print("❌ Stop error: \(error)")
             isRecording = false
         }
     }
+
     
     // MARK: - Audio Extraction
     private func extractAudio(from videoURL: URL) async throws -> URL? {
@@ -230,8 +288,11 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
 
 
     // MARK: - Save Logic
-    func saveTranscript(text: String, videoURL: URL? = nil) {
-        guard let folderURL = savedFolderURL else { return }
+    func saveTranscript(text: String, videoURL: URL? = nil, audioURL: URL? = nil) {
+        guard let folderURL = savedFolderURL else {
+            statusMessage = "No save location selected"
+            return
+        }
         
         // CRITICAL: Check the boolean return value
         guard folderURL.startAccessingSecurityScopedResource() else {
@@ -245,30 +306,158 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
         }
         
         let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyyMMdd:HHmmss"
+        dateFormatter.dateFormat = "yyyy-MM-dd-HH-mm-ss"
         let timestamp = dateFormatter.string(from: Date())
-        let baseFilename = "meeting-\(timestamp)"
+        let meetingFolderName = "meeting-\(timestamp)"
         
-        // Save the transcript
-        let transcriptFilename = "\(baseFilename).md"
-        let transcriptFileURL = folderURL.appendingPathComponent(transcriptFilename)
+        // Create the meeting folder
+        let meetingFolderURL = folderURL.appendingPathComponent(meetingFolderName)
         
         do {
+            try FileManager.default.createDirectory(at: meetingFolderURL, withIntermediateDirectories: true)
+            
+            var savedFiles: [String] = []
+            
+            // Save the transcript
+            let transcriptFilename = "transcript.md"
+            let transcriptFileURL = meetingFolderURL.appendingPathComponent(transcriptFilename)
             try text.write(to: transcriptFileURL, atomically: true, encoding: .utf8)
+            savedFiles.append(transcriptFilename)
             
             // Save the video file if provided
             if let videoURL = videoURL {
-                let videoFilename = "\(baseFilename).mov"
-                let videoFileURL = folderURL.appendingPathComponent(videoFilename)
+                // Verify the file exists before trying to copy
+                guard FileManager.default.fileExists(atPath: videoURL.path) else {
+                    throw NSError(domain: "MeetingManager", code: -1, 
+                                  userInfo: [NSLocalizedDescriptionKey: "Video file not found at \(videoURL.path)"])
+                }
                 
+                let videoFilename = "video.mov"
+                let videoFileURL = meetingFolderURL.appendingPathComponent(videoFilename)
                 try FileManager.default.copyItem(at: videoURL, to: videoFileURL)
-                statusMessage = "Saved \(transcriptFilename) and \(videoFilename)"
-            } else {
-                statusMessage = "Transcript Saved to \(transcriptFilename)"
+                savedFiles.append(videoFilename)
             }
+            
+            // Save the audio file if provided
+            if let audioURL = audioURL {
+                // Verify the file exists before trying to copy
+                guard FileManager.default.fileExists(atPath: audioURL.path) else {
+                    throw NSError(domain: "MeetingManager", code: -1, 
+                                  userInfo: [NSLocalizedDescriptionKey: "Audio file not found at \(audioURL.path)"])
+                }
+                
+                let audioFilename = "audio.m4a"
+                let audioFileURL = meetingFolderURL.appendingPathComponent(audioFilename)
+                try FileManager.default.copyItem(at: audioURL, to: audioFileURL)
+                savedFiles.append(audioFilename)
+            }
+            
+            statusMessage = "Saved to \(meetingFolderName): \(savedFiles.joined(separator: ", "))"
+            
         } catch {
             statusMessage = "Save failed: \(error.localizedDescription)"
+            print("Save error details: \(error)")
         }
+    }
+    
+    // MARK: - Live Speech-to-Text
+    private func startLiveTranscription() throws {
+        print("🎤 Starting live transcription...")
+        
+        guard let recognizer = speechRecognizer, recognizer.isAvailable else {
+            print("❌ Speech recognizer not available")
+            throw NSError(domain: "MeetingManager", code: -1,
+                         userInfo: [NSLocalizedDescriptionKey: "Speech recognizer not available"])
+        }
+        
+        print("✅ Speech recognizer is available")
+        
+        // Initialize audio engine if needed
+        if audioEngine == nil {
+            audioEngine = AVAudioEngine()
+        }
+        
+        guard let audioEngine = audioEngine else {
+            throw NSError(domain: "MeetingManager", code: -1,
+                         userInfo: [NSLocalizedDescriptionKey: "Failed to create audio engine"])
+        }
+        
+        // Cancel any previous task
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        
+        // Create and configure the speech recognition request
+        recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
+        guard let recognitionRequest = recognitionRequest else {
+            print("❌ Failed to create recognition request")
+            throw NSError(domain: "MeetingManager", code: -1,
+                         userInfo: [NSLocalizedDescriptionKey: "Unable to create recognition request"])
+        }
+        
+        recognitionRequest.shouldReportPartialResults = true
+        recognitionRequest.requiresOnDeviceRecognition = true // ✅ Offline mode
+        
+        print("✅ Recognition request created")
+        
+        let inputNode = audioEngine.inputNode
+        print("✅ Got input node: \(inputNode)")
+        
+        // Start the recognition task
+        recognitionTask = recognizer.recognitionTask(with: recognitionRequest) { [weak self] result, error in
+            guard let self = self else { return }
+            
+            if let result = result {
+                Task { @MainActor in
+                    self.liveTranscript = result.bestTranscription.formattedString
+                    print("📝 Transcript updated (\(result.bestTranscription.formattedString.count) chars): \(self.liveTranscript.prefix(50))...")
+                }
+            }
+            
+            if let error = error {
+                print("⚠️ Recognition error: \(error.localizedDescription)")
+                let nsError = error as NSError
+                print("   Error code: \(nsError.code), domain: \(nsError.domain)")
+                
+                Task { @MainActor in
+                    // Don't stop on certain errors, just log them
+                    if nsError.code != 216 { // 216 = retry error
+                        self.statusMessage = "Transcription issue: \(error.localizedDescription)"
+                    }
+                }
+            }
+        }
+        
+        print("✅ Recognition task started")
+        
+        // Configure the microphone input
+        let recordingFormat = inputNode.outputFormat(forBus: 0)
+        print("✅ Recording format: \(recordingFormat.sampleRate)Hz, \(recordingFormat.channelCount) channels")
+        
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
+            self?.recognitionRequest?.append(buffer)
+        }
+        
+        print("✅ Audio tap installed")
+        
+        audioEngine.prepare()
+        try audioEngine.start()
+        
+        print("✅ Audio engine started - Live transcription is NOW RUNNING")
+    }
+    
+    private func stopLiveTranscription() {
+        print("⏹️ Stopping live transcription")
+        print("   Current transcript length: \(liveTranscript.count) characters")
+        print("   Transcript preview: \(liveTranscript.prefix(100))")
+        
+        audioEngine?.stop()
+        audioEngine?.inputNode.removeTap(onBus: 0)
+        recognitionRequest?.endAudio()
+        recognitionTask?.cancel()
+        recognitionRequest = nil
+        recognitionTask = nil
+        
+        print("✅ Live transcription stopped")
     }
     
     // MARK: - Delegate Method

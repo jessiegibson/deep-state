@@ -7,11 +7,27 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		11F41BF32F380FD700E22B64 /* LIVE_TRANSCRIPTION_GUIDE.md in Resources */ = {isa = PBXBuildFile; fileRef = 11F41BF22F380FD700E22B64 /* LIVE_TRANSCRIPTION_GUIDE.md */; };
+		11F41BF52F380FE200E22B64 /* Info-plist-requirements.txt in Resources */ = {isa = PBXBuildFile; fileRef = 11F41BF42F380FE200E22B64 /* Info-plist-requirements.txt */; };
+		11F41BF72F38100E00E22B64 /* COMPLETE_SUMMARY.md in Resources */ = {isa = PBXBuildFile; fileRef = 11F41BF62F38100E00E22B64 /* COMPLETE_SUMMARY.md */; };
+		11F41BF92F382B8F00E22B64 /* TROUBLESHOOTING.md in Resources */ = {isa = PBXBuildFile; fileRef = 11F41BF82F382B8F00E22B64 /* TROUBLESHOOTING.md */; };
+		11F41C032F3A8BA800E22B64 /* ABORT_ERROR_FIX.md in Resources */ = {isa = PBXBuildFile; fileRef = 11F41C022F3A8BA800E22B64 /* ABORT_ERROR_FIX.md */; };
+		11F41C052F3A8EB700E22B64 /* INFO_PLIST_URGENT.md in Resources */ = {isa = PBXBuildFile; fileRef = 11F41C042F3A8EB700E22B64 /* INFO_PLIST_URGENT.md */; };
+		11F41C072F3A8ED600E22B64 /* ALTERNATIVE_SOLUTION.md in Resources */ = {isa = PBXBuildFile; fileRef = 11F41C062F3A8ED600E22B64 /* ALTERNATIVE_SOLUTION.md */; };
+		11F41C092F3A8F3400E22B64 /* CRASH_FIXED_WORKAROUND.md in Resources */ = {isa = PBXBuildFile; fileRef = 11F41C082F3A8F3400E22B64 /* CRASH_FIXED_WORKAROUND.md */; };
 		11FE81532F23398500D6AE57 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 11FE81522F23398500D6AE57 /* WhisperKit */; };
 		11FE81552F23398500D6AE57 /* whisperkit-cli in Frameworks */ = {isa = PBXBuildFile; productRef = 11FE81542F23398500D6AE57 /* whisperkit-cli */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		11F41BF22F380FD700E22B64 /* LIVE_TRANSCRIPTION_GUIDE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = LIVE_TRANSCRIPTION_GUIDE.md; sourceTree = "<group>"; };
+		11F41BF42F380FE200E22B64 /* Info-plist-requirements.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Info-plist-requirements.txt"; sourceTree = "<group>"; };
+		11F41BF62F38100E00E22B64 /* COMPLETE_SUMMARY.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = COMPLETE_SUMMARY.md; sourceTree = "<group>"; };
+		11F41BF82F382B8F00E22B64 /* TROUBLESHOOTING.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = TROUBLESHOOTING.md; sourceTree = "<group>"; };
+		11F41C022F3A8BA800E22B64 /* ABORT_ERROR_FIX.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = ABORT_ERROR_FIX.md; sourceTree = "<group>"; };
+		11F41C042F3A8EB700E22B64 /* INFO_PLIST_URGENT.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = INFO_PLIST_URGENT.md; sourceTree = "<group>"; };
+		11F41C062F3A8ED600E22B64 /* ALTERNATIVE_SOLUTION.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = ALTERNATIVE_SOLUTION.md; sourceTree = "<group>"; };
+		11F41C082F3A8F3400E22B64 /* CRASH_FIXED_WORKAROUND.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CRASH_FIXED_WORKAROUND.md; sourceTree = "<group>"; };
 		11FE81432F23393D00D6AE57 /* MeetingAgent.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MeetingAgent.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -54,6 +70,14 @@
 			children = (
 				11FE81452F23393D00D6AE57 /* MeetingAgent */,
 				11FE81442F23393D00D6AE57 /* Products */,
+				11F41BF22F380FD700E22B64 /* LIVE_TRANSCRIPTION_GUIDE.md */,
+				11F41BF42F380FE200E22B64 /* Info-plist-requirements.txt */,
+				11F41BF62F38100E00E22B64 /* COMPLETE_SUMMARY.md */,
+				11F41BF82F382B8F00E22B64 /* TROUBLESHOOTING.md */,
+				11F41C022F3A8BA800E22B64 /* ABORT_ERROR_FIX.md */,
+				11F41C042F3A8EB700E22B64 /* INFO_PLIST_URGENT.md */,
+				11F41C062F3A8ED600E22B64 /* ALTERNATIVE_SOLUTION.md */,
+				11F41C082F3A8F3400E22B64 /* CRASH_FIXED_WORKAROUND.md */,
 			);
 			sourceTree = "<group>";
 		};
@@ -134,6 +158,14 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				11F41C072F3A8ED600E22B64 /* ALTERNATIVE_SOLUTION.md in Resources */,
+				11F41BF72F38100E00E22B64 /* COMPLETE_SUMMARY.md in Resources */,
+				11F41C032F3A8BA800E22B64 /* ABORT_ERROR_FIX.md in Resources */,
+				11F41BF32F380FD700E22B64 /* LIVE_TRANSCRIPTION_GUIDE.md in Resources */,
+				11F41BF92F382B8F00E22B64 /* TROUBLESHOOTING.md in Resources */,
+				11F41C092F3A8F3400E22B64 /* CRASH_FIXED_WORKAROUND.md in Resources */,
+				11F41BF52F380FE200E22B64 /* Info-plist-requirements.txt in Resources */,
+				11F41C052F3A8EB700E22B64 /* INFO_PLIST_URGENT.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -296,9 +328,9 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Deep State";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "This app needs access to your calendar to look up meetings.";
-				INFOPLIST_KEY_NSCameraUsageDescription = "We need screen recording access to capture the meeting video and system audio.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "This app may use the camera for recording.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "We need microphone access to transcribe your voice during meetings.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This app needs microphone access to record audio.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -344,9 +376,9 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Deep State";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "This app needs access to your calendar to look up meetings.";
-				INFOPLIST_KEY_NSCameraUsageDescription = "We need screen recording access to capture the meeting video and system audio.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "This app may use the camera for recording.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "We need microphone access to transcribe your voice during meetings.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This app needs microphone access to record audio.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
