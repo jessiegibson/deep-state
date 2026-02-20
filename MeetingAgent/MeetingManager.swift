@@ -25,12 +25,12 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
     private var recordingOutput: SCRecordingOutput?
     private var lastRecordingURL: URL?
     private var whisper: WhisperKit? // Keep instance alive to avoid reloading model
-    
-    // Speech Recognition Properties
-    private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
+
+    // Live transcription
+    private var speechRecognizer: SFSpeechRecognizer? = SFSpeechRecognizer()
+    private var audioEngine: AVAudioEngine?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
-    private var audioEngine: AVAudioEngine?
     
     // Voice Visualizer Properties
     @Published var amplitudes: [CGFloat] = Array(repeating: 0.1, count: 5)
@@ -49,26 +49,8 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
         default:
             break
         }
-        
-        // Speech Recognition Check
-        SFSpeechRecognizer.requestAuthorization { status in
-            Task { @MainActor in
-                switch status {
-                case .authorized:
-                    print("✅ Speech recognition authorized")
-                case .denied:
-                    self.statusMessage = "Speech recognition access denied."
-                case .restricted:
-                    self.statusMessage = "Speech recognition restricted."
-                case .notDetermined:
-                    print("⚠️ Speech recognition not determined")
-                @unknown default:
-                    break
-                }
-            }
-        }
 
-        // Screen Recording Check (macOS 15+)
+        // Screen Recording Check (macOS 14+)
         if #available(macOS 14.0, *) {
             if !CGPreflightScreenCaptureAccess() {
                 // This opens the system dialog
@@ -180,10 +162,6 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
     func stopAndTranscribe() async {
         statusMessage = "Stopping..."
         
-        // Stop live transcription FIRST
-        // TEMPORARILY DISABLED
-        // stopLiveTranscription()
-        
         do {
             try await stream?.stopCapture()
             isRecording = false
@@ -193,18 +171,24 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
                 return 
             }
             
-            // TEMPORARY: Set default transcript
-            let transcriptText = "Recording completed - Transcription temporarily disabled to fix crash"
-            
-            print("💾 Saving transcript: \(transcriptText.count) characters")
-            
             statusMessage = "Extracting audio..."
+            print("📊 Extracting audio from video...")
             
             // Extract audio from the .mov file
             guard let audioURL = try await extractAudio(from: videoURL) else {
                 statusMessage = "Failed to extract audio"
                 return
             }
+            
+            print("✅ Audio extracted to: \(audioURL.path)")
+            
+            // Transcribe the audio file with WhisperKit
+            statusMessage = "Transcribing with AI..."
+            print("🤖 Starting transcription with WhisperKit...")
+            let transcriptText = await transcribeAudio(audioURL: audioURL)
+            
+            print("📝 Transcription completed: \(transcriptText.count) characters")
+            print("📄 Preview: \(transcriptText.prefix(200))")
             
             statusMessage = "Saving files..."
             
@@ -215,10 +199,36 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
             try? FileManager.default.removeItem(at: videoURL)
             try? FileManager.default.removeItem(at: audioURL)
             
+            print("✅ All files saved successfully")
+            
         } catch {
             statusMessage = "Processing failed: \(error.localizedDescription)"
             print("❌ Stop error: \(error)")
             isRecording = false
+        }
+    }
+    
+    // MARK: - Transcription
+    private func transcribeAudio(audioURL: URL) async -> String {
+        guard let whisper = whisper else {
+            print("❌ WhisperKit model not loaded")
+            return "Transcription unavailable - AI model not loaded"
+        }
+        
+        do {
+            print("🎤 Transcribing audio file...")
+            let results = try await whisper.transcribe(audioPath: audioURL.path)
+            
+            if let text = results.first?.text, !text.isEmpty {
+                print("✅ Transcription successful: \(text.count) characters")
+                return text
+            } else {
+                print("⚠️ No speech detected in audio")
+                return "No speech detected in recording"
+            }
+        } catch {
+            print("❌ Transcription error: \(error.localizedDescription)")
+            return "Transcription failed: \(error.localizedDescription)"
         }
     }
 
@@ -403,7 +413,7 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
         print("✅ Got input node: \(inputNode)")
         
         // Start the recognition task
-        recognitionTask = recognizer.recognitionTask(with: recognitionRequest) { [weak self] result, error in
+        recognitionTask = recognizer.recognitionTask(with: recognitionRequest) { [weak self] (result: SFSpeechRecognitionResult?, error: Error?) in
             guard let self = self else { return }
             
             if let result = result {
@@ -433,7 +443,7 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
         let recordingFormat = inputNode.outputFormat(forBus: 0)
         print("✅ Recording format: \(recordingFormat.sampleRate)Hz, \(recordingFormat.channelCount) channels")
         
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] (buffer: AVAudioPCMBuffer, _: AVAudioTime) in
             self?.recognitionRequest?.append(buffer)
         }
         
