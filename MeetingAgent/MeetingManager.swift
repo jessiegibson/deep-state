@@ -736,17 +736,22 @@ extension MeetingManager {
             audioRecorder?.record()
             
             // Update the visualizer 20 times per second
-            timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
-                self.audioRecorder?.updateMeters()
-                let power = self.audioRecorder?.averagePower(forChannel: 0) ?? -60
+            timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+                guard let self = self else { return }
                 
-                // Map the decibels (-60 to 0) to a scale of 0.1 to 1.0
-                let normalizedPower = max(0.1, CGFloat(pow(10, power / 20)))
-                
-                withAnimation(.linear(duration: 0.05)) {
-                    // Create a staggered effect for the 5 bars
-                    self.amplitudes = (0..<5).map { i in
-                        normalizedPower * CGFloat.random(in: 0.8...1.2)
+                Task { @MainActor [weak self] in
+                    guard let self = self else { return }
+                    self.audioRecorder?.updateMeters()
+                    let power = self.audioRecorder?.averagePower(forChannel: 0) ?? -60
+                    
+                    // Map the decibels (-60 to 0) to a scale of 0.1 to 1.0
+                    let normalizedPower = max(0.1, CGFloat(pow(10, power / 20)))
+                    
+                    withAnimation(.linear(duration: 0.05)) {
+                        // Create a staggered effect for the 5 bars
+                        self.amplitudes = (0..<5).map { i in
+                            normalizedPower * CGFloat.random(in: 0.8...1.2)
+                        }
                     }
                 }
             }
