@@ -1,79 +1,153 @@
 import SwiftUI
 
 struct ContentView: View {
-    // This creates the link to the Engine
     @StateObject var manager = MeetingManager()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Image("deep-state-logo")  // Add image to Assets.xcassets first
-                        .resizable()
-                        .scaledToFit()
-                        .frame(height: 40)
-                    
-            Text("Choose Location")
-                .font(.headline)
+        VStack(alignment: .leading, spacing: 0) {
+            // Header
             HStack {
-                Image(systemName: "folder.badge.plus")
-                
-                VStack(alignment: .leading) {
-                    Text("Save Transcripts To:")
-                        .font(.caption)
+                Text("deep state")
+                Spacer()
+            }
+            .padding(NBDesign.padding)
+            .background(NBDesign.foreground)
+
+            VStack(alignment: .leading, spacing: NBDesign.padding) {
+
+                // Recording Mode Picker
+                VStack(alignment: .leading, spacing: NBDesign.smallPadding) {
+                    Text("MODE")
+                        .font(NBDesign.captionFont)
                         .foregroundStyle(.secondary)
-                    Text(manager.savedFolderURL?.lastPathComponent ?? "No Folder Selected")
-                        .font(.body)
-                        .fontWeight(.medium)
-                    
+
+                    HStack(spacing: 0) {
+                        ForEach(RecordingMode.allCases, id: \.self) { mode in
+                            Button(mode.rawValue.uppercased()) {
+                                manager.recordingMode = mode
+                            }
+                            .font(NBDesign.captionFont)
+                            .foregroundStyle(
+                                manager.recordingMode == mode
+                                    ? NBDesign.background
+                                    : NBDesign.foreground
+                            )
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(
+                                manager.recordingMode == mode
+                                    ? NBDesign.foreground
+                                    : NBDesign.surface
+                            )
+                            .overlay(
+                                Rectangle()
+                                    .stroke(NBDesign.border, lineWidth: NBDesign.thinBorder)
+                            )
+                        }
+                    }
                 }
-                
-                Spacer()
-                
-                Button("Change...") {
-                    manager.selectFolder()
-                }
-            }
-            
-            Divider()
-            
-            // Live Transcript Display
-            if manager.isRecording {
-                VStack(alignment: .leading, spacing: 8) {
+                .disabled(manager.isRecording)
+                .opacity(manager.isRecording ? 0.5 : 1.0)
+
+                // Save Location
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("SAVE TO")
+                        .font(NBDesign.captionFont)
+                        .foregroundStyle(.secondary)
+
                     HStack {
-                        Image(systemName: "record.circle.fill")
-                            .foregroundStyle(.red)
-                        Text("Recording in progress...")
-                            .font(.caption)
+                        Image(systemName: "folder.fill")
+                            .font(.system(size: 16, weight: .bold))
+                        Text(manager.savedFolderURL?.lastPathComponent ?? "No Folder Selected")
+                            .font(NBDesign.bodyFont)
+                            .lineLimit(1)
+                        Spacer()
+                        Button("CHANGE") {
+                            manager.selectFolder()
+                        }
+                        .font(NBDesign.captionFont)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .overlay(
+                            Rectangle()
+                                .stroke(NBDesign.border, lineWidth: NBDesign.thinBorder)
+                        )
+                    }
+                }
+                .nbCard()
+
+                // Divider
+                Rectangle()
+                    .fill(NBDesign.border)
+                    .frame(height: NBDesign.thinBorder)
+
+                // Status / Recording Area
+                if manager.isRecording {
+                    VStack(alignment: .leading, spacing: NBDesign.smallPadding) {
+                        HStack {
+                            Circle()
+                                .fill(NBDesign.accent)
+                                .frame(width: 10, height: 10)
+                            Text("RECORDING")
+                                .font(NBDesign.captionFont)
+                                .foregroundStyle(NBDesign.accent)
+                        }
+
+                        // Live transcript (audio-only mode)
+                        if manager.recordingMode == .audioOnly && !manager.liveTranscript.isEmpty {
+                            ScrollView {
+                                Text(manager.liveTranscript)
+                                    .font(NBDesign.bodyFont)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .frame(maxHeight: 100)
+                            .nbCard()
+                        }
+
+                        VoiceVisualizer(amplitudes: manager.amplitudes)
+                    }
+                    .transition(.opacity)
+                } else {
+                    VStack {
+                        Spacer()
+                        Text(manager.statusMessage.uppercased())
+                            .font(NBDesign.bodyFont)
                             .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity)
+                        Spacer()
                     }
-                    
-                    // Voice visualizer
-                    VoiceVisualizer(amplitudes: manager.amplitudes)
+                    .frame(minHeight: 60)
                 }
-                .transition(.opacity)
-            } else {
-                Spacer()
-                Text(manager.statusMessage)
-                Spacer()
-            }
-            
-            Button(manager.isRecording ? "Stop & Save" : "Start Recording") {
-                Task {
-                    if manager.isRecording {
-                        await manager.stopAndTranscribe()
-                        manager.stopMonitoring()
-                    } else {
-                        await manager.start()
-                        manager.startMonitoring()
+
+                // Record Button
+                HStack {
+                    Spacer()
+                    Button(manager.isRecording ? "STOP & SAVE" : "START RECORDING") {
+                        Task {
+                            if manager.isRecording {
+                                await manager.stopAndTranscribe()
+                                if manager.recordingMode == .screenAndAudio {
+                                    manager.stopMonitoring()
+                                }
+                            } else {
+                                await manager.start()
+                                if manager.recordingMode == .screenAndAudio {
+                                    manager.startMonitoring()
+                                }
+                            }
+                        }
                     }
+                    .buttonStyle(NBButtonStyle(
+                        color: manager.isRecording ? NBDesign.accent : NBDesign.foreground,
+                        textColor: NBDesign.background
+                    ))
+                    Spacer()
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 8)
-            .background(manager.isRecording ? Color.red.opacity(0.1) : Color.blue.opacity(0.1))
-            .buttonStyle(.borderedProminent)
-            .tint(manager.isRecording ? .red : .blue)
+            .padding(NBDesign.padding)
         }
-        .padding(20)
-        .frame(width: 400, height: 380)
+        .frame(width: 640, height: 480)
+        .background(NBDesign.background)
     }
 }

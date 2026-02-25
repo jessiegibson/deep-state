@@ -5,6 +5,14 @@ import Combine
 import AVFoundation
 import Speech
 
+enum RecordingMode: String, CaseIterable {
+    case screenAndAudio = "Screen + Audio"
+    case audioOnly = "Audio Only"
+}
+
+enum PermissionStatus {
+    case granted, denied, notDetermined
+}
 
 @MainActor
 class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
@@ -12,7 +20,8 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
     @Published var statusMessage = "Ready"
     @Published var savedFolderURL: URL?
     @Published var liveTranscript = ""
-    
+    @Published var recordingMode: RecordingMode = .audioOnly
+
     // Preferences
     @Published var shouldRecordCamera: Bool = UserDefaults.standard.bool(forKey: "pref_record_camera") {
         didSet { UserDefaults.standard.set(shouldRecordCamera, forKey: "pref_record_camera") }
@@ -20,7 +29,7 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
     @Published var shouldRecordSystemAudio: Bool = UserDefaults.standard.bool(forKey: "pref_record_audio") {
         didSet { UserDefaults.standard.set(shouldRecordSystemAudio, forKey: "pref_record_audio") }
     }
-    
+
     private var stream: SCStream?
     private var recordingOutput: SCRecordingOutput?
     private var lastRecordingURL: URL?
@@ -31,7 +40,12 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
     private var audioEngine: AVAudioEngine?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
-    
+
+    // Audio-only recording
+    private var audioFile: AVAudioFile?
+    private var audioOnlyEngine: AVAudioEngine?
+    private var audioOnlyURL: URL?
+
     // Voice Visualizer Properties
     @Published var amplitudes: [CGFloat] = Array(repeating: 0.1, count: 5)
     private var audioRecorder: AVAudioRecorder?
@@ -94,8 +108,13 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
     
     // MARK: - Recording Logic
     func start() async {
+        if recordingMode == .audioOnly {
+            await startAudioOnly()
+            return
+        }
+
         statusMessage = "Starting..."
-        
+
         // Check screen recording permission first
         if #available(macOS 14.0, *) {
             if !CGPreflightScreenCaptureAccess() {
@@ -160,8 +179,13 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
     }
     
     func stopAndTranscribe() async {
+        if recordingMode == .audioOnly {
+            await stopAudioOnly()
+            return
+        }
+
         statusMessage = "Stopping..."
-        
+
         do {
             try await stream?.stopCapture()
             isRecording = false
@@ -469,7 +493,224 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
         
         print("✅ Live transcription stopped")
     }
-    
+
+    // MARK: - Audio-Only Recording
+    private func startAudioOnly() async {
+        statusMessage = "Starting audio recording..."
+
+        let micStatus = AVCaptureDevice.authorizationStatus(for: .audio)
+        guard micStatus == .authorized else {
+            if micStatus == .notDetermined {
+                AVCaptureDevice.requestAccess(for: .audio) { _ in }
+            }
+            statusMessage = "Microphone access required."
+            return
+        }
+
+        do {
+            let engine = AVAudioEngine()
+            self.audioOnlyEngine = engine
+
+            let inputNode = engine.inputNode
+            let recordingFormat = inputNode.outputFormat(forBus: 0)
+
+            // Prepare WAV file for writing
+            let tempURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent("audio_only_recording.wav")
+            if FileManager.default.fileExists(atPath: tempURL.path) {
+                try? FileManager.default.removeItem(at: tempURL)
+            }
+
+            let file = try AVAudioFile(forWriting: tempURL, settings: recordingFormat.settings)
+            self.audioFile = file
+            self.audioOnlyURL = tempURL
+
+            // Set up live transcription
+            guard let recognizer = speechRecognizer, recognizer.isAvailable else {
+                statusMessage = "Speech recognizer not available"
+                return
+            }
+
+            recognitionTask?.cancel()
+            recognitionTask = nil
+
+            let request = SFSpeechAudioBufferRecognitionRequest()
+            request.shouldReportPartialResults = true
+            request.requiresOnDeviceRecognition = true
+            self.recognitionRequest = request
+
+            recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
+                guard let self = self else { return }
+                if let result = result {
+                    Task { @MainActor in
+                        self.liveTranscript = result.bestTranscription.formattedString
+                    }
+                }
+                if let error = error {
+                    print("Recognition error: \(error.localizedDescription)")
+                }
+            }
+
+            // Single tap: write to file + feed recognizer + compute amplitude
+            inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
+                guard let self = self else { return }
+
+                // Write to audio file
+                try? self.audioFile?.write(from: buffer)
+
+                // Feed to speech recognizer
+                self.recognitionRequest?.append(buffer)
+
+                // Compute amplitude for visualizer
+                guard let channelData = buffer.floatChannelData?[0] else { return }
+                let frameLength = Int(buffer.frameLength)
+                var sum: Float = 0
+                for i in 0..<frameLength {
+                    sum += abs(channelData[i])
+                }
+                let avg = sum / Float(frameLength)
+                let normalizedPower = max(0.1, CGFloat(avg) * 5.0)
+
+                Task { @MainActor in
+                    withAnimation(.linear(duration: 0.05)) {
+                        self.amplitudes = (0..<5).map { _ in
+                            min(1.0, normalizedPower * CGFloat.random(in: 0.8...1.2))
+                        }
+                    }
+                }
+            }
+
+            engine.prepare()
+            try engine.start()
+
+            isRecording = true
+            liveTranscript = ""
+            statusMessage = "Recording (Audio Only)..."
+        } catch {
+            statusMessage = "Error: \(error.localizedDescription)"
+            print("Audio-only start error: \(error)")
+        }
+    }
+
+    private func stopAudioOnly() async {
+        statusMessage = "Stopping..."
+
+        // Stop engine and transcription
+        audioOnlyEngine?.stop()
+        audioOnlyEngine?.inputNode.removeTap(onBus: 0)
+        recognitionRequest?.endAudio()
+        recognitionTask?.cancel()
+        recognitionRequest = nil
+        recognitionTask = nil
+        audioFile = nil // Close the file handle
+
+        isRecording = false
+        amplitudes = Array(repeating: 0.1, count: 5)
+
+        guard let wavURL = audioOnlyURL else {
+            statusMessage = "No recording found"
+            return
+        }
+
+        // Convert WAV to M4A for smaller file size
+        statusMessage = "Converting audio..."
+        guard let m4aURL = try? await convertToM4A(from: wavURL) else {
+            // If conversion fails, use the live transcript with the WAV file
+            if !liveTranscript.isEmpty {
+                statusMessage = "Saving with live transcript..."
+                saveTranscript(text: liveTranscript, videoURL: nil, audioURL: wavURL)
+                try? FileManager.default.removeItem(at: wavURL)
+                statusMessage = "Saved successfully"
+            } else {
+                statusMessage = "Audio conversion failed"
+            }
+            return
+        }
+
+        // Use live transcript if available, otherwise transcribe with WhisperKit
+        let transcriptText: String
+        if !liveTranscript.isEmpty {
+            transcriptText = liveTranscript
+        } else {
+            statusMessage = "Transcribing with AI..."
+            transcriptText = await transcribeAudio(audioURL: m4aURL)
+        }
+
+        statusMessage = "Saving files..."
+        saveTranscript(text: transcriptText, videoURL: nil, audioURL: m4aURL)
+
+        // Cleanup temp files
+        try? FileManager.default.removeItem(at: wavURL)
+        try? FileManager.default.removeItem(at: m4aURL)
+
+        statusMessage = "Saved successfully"
+    }
+
+    private func convertToM4A(from sourceURL: URL) async throws -> URL {
+        let asset = AVURLAsset(url: sourceURL)
+        let outputURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("audio_converted.m4a")
+        try? FileManager.default.removeItem(at: outputURL)
+
+        guard let exportSession = AVAssetExportSession(
+            asset: asset, presetName: AVAssetExportPresetAppleM4A
+        ) else {
+            throw NSError(domain: "MeetingManager", code: -1,
+                          userInfo: [NSLocalizedDescriptionKey: "Failed to create export session"])
+        }
+
+        try await exportSession.export(to: outputURL, as: .m4a)
+        return outputURL
+    }
+
+    // MARK: - Permission Status (for Onboarding)
+    func microphonePermissionStatus() -> PermissionStatus {
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized: return .granted
+        case .denied, .restricted: return .denied
+        case .notDetermined: return .notDetermined
+        @unknown default: return .notDetermined
+        }
+    }
+
+    func requestMicrophonePermission() async -> Bool {
+        await withCheckedContinuation { continuation in
+            AVCaptureDevice.requestAccess(for: .audio) { granted in
+                continuation.resume(returning: granted)
+            }
+        }
+    }
+
+    func screenRecordingPermissionStatus() -> PermissionStatus {
+        if #available(macOS 14.0, *) {
+            return CGPreflightScreenCaptureAccess() ? .granted : .notDetermined
+        }
+        return .granted
+    }
+
+    func requestScreenRecordingPermission() {
+        if #available(macOS 14.0, *) {
+            CGRequestScreenCaptureAccess()
+        }
+    }
+
+    func speechRecognitionPermissionStatus() -> PermissionStatus {
+        switch SFSpeechRecognizer.authorizationStatus() {
+        case .authorized: return .granted
+        case .denied, .restricted: return .denied
+        case .notDetermined: return .notDetermined
+        @unknown default: return .notDetermined
+        }
+    }
+
+    func requestSpeechRecognitionPermission() async -> Bool {
+        await withCheckedContinuation { continuation in
+            SFSpeechRecognizer.requestAuthorization { status in
+                continuation.resume(returning: status == .authorized)
+            }
+        }
+    }
+
     // MARK: - Delegate Method
     // CRITICAL: Must be nonisolated because SCKit calls this on a background thread
     nonisolated func recordingOutput(_ recordingOutput: SCRecordingOutput, didFailWithError error: Error) {

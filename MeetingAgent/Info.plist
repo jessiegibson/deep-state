@@ -4,7 +4,5 @@
 <dict>
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>This app records your screen to capture meeting content.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>This app uses Speech Recognition to create transcripts from the meeting content.</string>
 </dict>
 </plist>

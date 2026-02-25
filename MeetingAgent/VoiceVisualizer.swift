@@ -11,29 +11,29 @@ struct VoiceVisualizer: View {
     let amplitudes: [CGFloat]
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 6) {
             ForEach(0..<amplitudes.count, id: \.self) { index in
-                RoundedRectangle(cornerRadius: 10)
-                    // Dynamic color based on volume (Green to Red)
-                    .foregroundStyle(barColor(for: amplitudes[index]))
-                    .frame(width: 4, height: 20 * amplitudes[index])
-                    // The "Glow" effect
-                    .shadow(color: barColor(for: amplitudes[index]).opacity(0.6),
-                            radius: amplitudes[index] > 0.7 ? 8 : 3)
-                    .animation(.spring(response: 0.2, dampingFraction: 0.5), value: amplitudes[index])
+                Rectangle()
+                    .fill(barColor(for: amplitudes[index]))
+                    .frame(width: 8, height: max(4, 40 * amplitudes[index]))
+                    .overlay(
+                        Rectangle()
+                            .stroke(NBDesign.border, lineWidth: NBDesign.thinBorder)
+                    )
+                    .animation(.linear(duration: 0.05), value: amplitudes[index])
             }
         }
-        .frame(height: 40)
+        .frame(height: 44)
+        .padding(.vertical, 4)
     }
 
-    // Logic to change color if the user gets too loud
     private func barColor(for amplitude: CGFloat) -> Color {
         if amplitude > 0.8 {
-            return .red    // High volume "Glow"
+            return NBDesign.accent
         } else if amplitude > 0.5 {
-            return .orange // Medium volume
+            return NBDesign.foreground
         } else {
-            return .green  // Normal volume
+            return NBDesign.foreground.opacity(0.5)
         }
     }
 }

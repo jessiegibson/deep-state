@@ -2,6 +2,17 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+
+## Overview of Application
+This application is a MacOS desktop application that allows the user to create audio, video, screen recordings while the user is in a meeting, on a video call, walking through documents. This application will save the audio recording, transcribe the audio, and if selected record the screen of the user. 
+
+The application allows the user to select where they want to save the files. When the application is first installed the applicatino will step through a few screens to ensure that the user provides all of the permissions to their desktop. 
+
+Transcription of the audio files should preferrably be done on the device using the WhisperKit. This application should allow for the privacy of the user. 
+
+## UX/UI Design
+The design of this application should be neo-brutalist, using simple navigation. 
+
 ## Build & Run
 
 This is a native macOS SwiftUI app built with Xcode. There is no Package.swift; the project uses an `.xcodeproj` file with Swift Package Manager dependencies.
