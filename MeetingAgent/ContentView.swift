@@ -7,7 +7,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 0) {
             // Header
             HStack {
-                Text("deep state")
+                Text("deep state Meeting Agent")
                 Spacer()
             }
             .padding(NBDesign.padding)

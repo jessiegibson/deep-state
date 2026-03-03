@@ -1,4 +1,10 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+
+#endif
 
 // MARK: - Design Tokens
 enum NBDesign {
@@ -13,7 +19,7 @@ enum NBDesign {
     static let foreground = Color.green
     static let accent = Color(red: 1.0, green: 0.2, blue: 0.2)
     static let secondaryAccent = Color(red: 0.0, green: 0.5, blue: 1.0)
-    static let surface = Color(white: 0.95)
+    static let surface = Color.gray.opacity(0.05)
     static let border = Color.black
 
     // Borders
@@ -71,5 +77,28 @@ struct NBButtonStyle: ButtonStyle {
 extension View {
     func nbCard() -> some View {
         modifier(NBCardModifier())
+    }
+}
+
+extension Color {
+    init(light: Color, dark: Color) {
+        #if canImport(UIKit)
+        self.init(UIColor(dynamicProvider: { traits in
+            switch traits.userInterfaceStyle {
+            case .dark:
+                return UIColor(dark)
+            default:
+                return UIColor(light)
+            }
+        }))
+        #elseif canImport(AppKit)
+        self.init(NSColor(name: nil, dynamicProvider: { appearance in
+            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+                ? NSColor(dark)
+                : NSColor(light)
+        }))
+        #else
+        self = light
+        #endif
     }
 }

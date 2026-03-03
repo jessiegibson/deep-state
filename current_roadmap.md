@@ -18,6 +18,10 @@ The app is an MVP that successfully:
 - UI is functional but not yet aligned with the neo-brutalist design vision
 - Camera preview view exists but is unused
 - No audio-only recording mode (always records screen)
+- When WiFi is not available or the WhisperKit doesn't get loaded, not transcription. 
+- No Summaries
+- Transcription doesn't label speakers.
+- Currently doesn't allow to use webcam to take video of the user. 
 
 ---
 
@@ -73,14 +77,14 @@ Expose WhisperKit's multi-language support. Let the user choose a transcription 
 After transcription, generate a structured summary of the meeting: key topics, action items, decisions made. This should run on-device if possible (using a local model) to maintain the privacy-first approach.
 
 ### 3.2 Speaker Diarization
-Identify and label different speakers in the transcript (e.g., "Speaker 1:", "Speaker 2:"). WhisperKit may support this or a separate model can be used.
+Identify and label different speakers in the transcript (e.g., "Speaker 1:", "Speaker 2:"). WhisperKit may support this or a separate model can be used. 
+Create a feature that lets the user label speakers by name.  
 
 ### 3.3 Calendar Integration
 Use EventKit to pull upcoming calendar events and auto-associate recordings with meetings. Pre-fill meeting titles from calendar event names.
 
 ### 3.4 Keyword & Full-Text Search
 Allow searching across all saved transcripts by keyword. Index transcripts for fast lookup.
-
 ---
 
 ## Phase 4 - Platform & Distribution
@@ -96,3 +100,10 @@ Add a lightweight menu bar presence so the user can start/stop recordings withou
 
 ### 4.4 App Store Preparation
 Prepare for distribution: proper code signing, sandboxing review, App Store metadata, and privacy policy.
+
+
+## Future Features
+- Allow the user to batch process the transcripts.
+- Integrate with Obsidian.
+- Develop an iOS mobile application
+
