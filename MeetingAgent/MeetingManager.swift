@@ -468,12 +468,17 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
             let transcriptFileURL = meetingFolderURL.appendingPathComponent(transcriptFilename)
             let titleTrimmed = meetingTitle.trimmingCharacters(in: .whitespacesAndNewlines)
             let trimmedNotes = meetingNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+            let displayDateFormatter = DateFormatter()
+            displayDateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+            let displayTimestamp = displayDateFormatter.string(from: Date())
             var sections: [String] = []
-            if !titleTrimmed.isEmpty { sections.append("# \(titleTrimmed)") }
+            if !titleTrimmed.isEmpty {
+                sections.append("# \(titleTrimmed)\n\(displayTimestamp)")
+            } else {
+                sections.append(displayTimestamp)
+            }
             if !trimmedNotes.isEmpty { sections.append("## Meeting Notes\n\n\(trimmedNotes)") }
-            let finalText = sections.isEmpty
-                ? text
-                : sections.joined(separator: "\n\n---\n\n") + "\n\n---\n\n## Transcript\n\n\(text)"
+            let finalText = sections.joined(separator: "\n\n---\n\n") + "\n\n---\n\n## Transcript\n\n\(text)"
             try finalText.write(to: transcriptFileURL, atomically: true, encoding: .utf8)
             savedFiles.append(transcriptFilename)
             
