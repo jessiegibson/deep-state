@@ -51,7 +51,10 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
     @Published var amplitudes: [CGFloat] = Array(repeating: 0.1, count: 5)
     private var audioRecorder: AVAudioRecorder?
     private var timer: Timer?
-    
+    @Published var isPaused = false
+    private var recordingSegments: [URL] = []
+    private var segmentCounter = 0
+
     func checkPermissions() {
         // Microphone Check
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
@@ -115,62 +118,15 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
         }
 
         statusMessage = "Starting..."
+        recordingSegments = []
+        segmentCounter = 0
+        isPaused = false
 
-        // Check screen recording permission first
-        if #available(macOS 14.0, *) {
-            if !CGPreflightScreenCaptureAccess() {
-                statusMessage = "⚠️ Screen Recording permission required. Check System Settings → Privacy & Security → Screen Recording"
-                print("❌ Screen recording permission not granted")
-                return
-            }
-        }
-        
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("temp_rec_0.mov")
+        self.lastRecordingURL = url
+
         do {
-            let content = try await SCShareableContent.current
-            guard let display = content.displays.first else {
-                statusMessage = "No display found"
-                return
-            }
-            
-            // Exclude our own app window to prevent 'infinity mirror' effect
-            let excludedWindows = content.windows.filter { $0.owningApplication?.bundleIdentifier == Bundle.main.bundleIdentifier }
-            let filter = SCContentFilter(display: display, excludingWindows: excludedWindows)
-            
-            let config = SCStreamConfiguration()
-            config.width = Int(display.width)
-            config.height = Int(display.height)
-            
-            // Apply User Preferences
-            config.capturesAudio = shouldRecordSystemAudio
-            if #available(macOS 14.0, *) {
-                config.captureMicrophone = true
-            }
-            
-            // Set temp recording path
-            let url = FileManager.default.temporaryDirectory.appendingPathComponent("temp_rec.mov")
-            self.lastRecordingURL = url
-            
-            if FileManager.default.fileExists(atPath: url.path) {
-                try? FileManager.default.removeItem(at: url)
-            }
-            
-            let recordConfig = SCRecordingOutputConfiguration()
-            recordConfig.outputURL = url
-            recordConfig.outputFileType = .mov
-            recordConfig.videoCodecType = .h264
-            
-            stream = SCStream(filter: filter, configuration: config, delegate: nil)
-            recordingOutput = SCRecordingOutput(configuration: recordConfig, delegate: self)
-            
-            guard let stream = stream, let recordingOutput = recordingOutput else { return }
-            
-            try stream.addRecordingOutput(recordingOutput)
-            try await stream.startCapture()
-            
-            // Start live transcription
-            // TEMPORARILY DISABLED - Causes audio conflict with ScreenCaptureKit
-            // try startLiveTranscription()
-            
+            try await startScreenRecording(to: url)
             isRecording = true
             statusMessage = "Recording..."
         } catch {
@@ -186,53 +142,103 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
         }
 
         statusMessage = "Stopping..."
+        isPaused = false
 
         do {
             try await stream?.stopCapture()
             isRecording = false
-            
-            guard let videoURL = lastRecordingURL else { 
-                statusMessage = "No recording found"
-                return 
+
+            if let currentURL = lastRecordingURL {
+                recordingSegments.append(currentURL)
             }
-            
+
+            guard !recordingSegments.isEmpty else {
+                statusMessage = "No recording found"
+                return
+            }
+
+            // Merge segments if the recording was paused and resumed
+            let videoURL: URL
+            if recordingSegments.count > 1 {
+                statusMessage = "Merging recording segments..."
+                videoURL = try await mergeVideoSegments(recordingSegments)
+            } else {
+                videoURL = recordingSegments[0]
+            }
+
             statusMessage = "Extracting audio..."
-            print("📊 Extracting audio from video...")
-            
-            // Extract audio from the .mov file
             guard let audioURL = try await extractAudio(from: videoURL) else {
                 statusMessage = "Failed to extract audio"
                 return
             }
-            
-            print("✅ Audio extracted to: \(audioURL.path)")
-            
-            // Transcribe the audio file with WhisperKit
+
             statusMessage = "Transcribing with AI..."
-            print("🤖 Starting transcription with WhisperKit...")
             let transcriptText = await transcribeAudio(audioURL: audioURL)
-            
-            print("📝 Transcription completed: \(transcriptText.count) characters")
-            print("📄 Preview: \(transcriptText.prefix(200))")
-            
+
             statusMessage = "Saving files..."
-            
-            // Save all three files: video, audio, and transcript
             saveTranscript(text: transcriptText, videoURL: videoURL, audioURL: audioURL)
-            
-            // Clean up temporary files after successful save
-            try? FileManager.default.removeItem(at: videoURL)
+
+            // Cleanup segment files and any merged temp file
+            for url in recordingSegments { try? FileManager.default.removeItem(at: url) }
+            if recordingSegments.count > 1 { try? FileManager.default.removeItem(at: videoURL) }
             try? FileManager.default.removeItem(at: audioURL)
-            
-            print("✅ All files saved successfully")
-            
+            recordingSegments = []
+
         } catch {
             statusMessage = "Processing failed: \(error.localizedDescription)"
-            print("❌ Stop error: \(error)")
             isRecording = false
         }
     }
     
+    // MARK: - Pause / Resume
+    func pauseRecording() async {
+        guard isRecording, !isPaused else { return }
+
+        if recordingMode == .audioOnly {
+            audioOnlyEngine?.pause()
+            amplitudes = Array(repeating: 0.1, count: 5)
+            isPaused = true
+            statusMessage = "Paused"
+        } else {
+            do {
+                try await stream?.stopCapture()
+                if let url = lastRecordingURL {
+                    recordingSegments.append(url)
+                }
+                isPaused = true
+                statusMessage = "Paused"
+            } catch {
+                statusMessage = "Pause failed: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func resumeRecording() async {
+        guard isRecording, isPaused else { return }
+
+        if recordingMode == .audioOnly {
+            do {
+                try audioOnlyEngine?.start()
+                isPaused = false
+                statusMessage = "Recording (Audio Only)..."
+            } catch {
+                statusMessage = "Resume failed: \(error.localizedDescription)"
+            }
+        } else {
+            segmentCounter += 1
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent("temp_rec_\(segmentCounter).mov")
+            self.lastRecordingURL = url
+            do {
+                try await startScreenRecording(to: url)
+                isPaused = false
+                statusMessage = "Recording..."
+            } catch {
+                statusMessage = "Resume failed: \(error.localizedDescription)"
+            }
+        }
+    }
+
     // MARK: - Transcription
     private func transcribeAudio(audioURL: URL) async -> String {
         guard let whisper = whisper else {
@@ -283,6 +289,101 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
         // Export the audio using the modern async API
         try await exportSession.export(to: outputURL, as: .m4a)
         
+        return outputURL
+    }
+
+    // MARK: - Screen Recording Helper
+    private func startScreenRecording(to url: URL) async throws {
+        if #available(macOS 14.0, *) {
+            if !CGPreflightScreenCaptureAccess() {
+                throw NSError(domain: "MeetingManager", code: 1,
+                              userInfo: [NSLocalizedDescriptionKey: "Screen Recording permission required. Check System Settings → Privacy & Security → Screen Recording"])
+            }
+        }
+
+        let content = try await SCShareableContent.current
+        guard let display = content.displays.first else {
+            throw NSError(domain: "MeetingManager", code: 2,
+                          userInfo: [NSLocalizedDescriptionKey: "No display found"])
+        }
+
+        let excludedWindows = content.windows.filter {
+            $0.owningApplication?.bundleIdentifier == Bundle.main.bundleIdentifier
+        }
+        let filter = SCContentFilter(display: display, excludingWindows: excludedWindows)
+
+        let config = SCStreamConfiguration()
+        config.width = Int(display.width)
+        config.height = Int(display.height)
+        config.capturesAudio = shouldRecordSystemAudio
+        if #available(macOS 14.0, *) {
+            config.captureMicrophone = true
+        }
+
+        if FileManager.default.fileExists(atPath: url.path) {
+            try? FileManager.default.removeItem(at: url)
+        }
+
+        let recordConfig = SCRecordingOutputConfiguration()
+        recordConfig.outputURL = url
+        recordConfig.outputFileType = .mov
+        recordConfig.videoCodecType = .h264
+
+        stream = SCStream(filter: filter, configuration: config, delegate: nil)
+        recordingOutput = SCRecordingOutput(configuration: recordConfig, delegate: self)
+
+        guard let s = stream, let ro = recordingOutput else {
+            throw NSError(domain: "MeetingManager", code: 3,
+                          userInfo: [NSLocalizedDescriptionKey: "Failed to create stream or recording output"])
+        }
+
+        try s.addRecordingOutput(ro)
+        try await s.startCapture()
+    }
+
+    private func mergeVideoSegments(_ urls: [URL]) async throws -> URL {
+        let composition = AVMutableComposition()
+        var currentTime = CMTime.zero
+        var compositionTracks: [Int: AVMutableCompositionTrack] = [:]
+
+        for url in urls {
+            let asset = AVURLAsset(url: url)
+            let duration = try await asset.load(.duration)
+            let tracks = try await asset.load(.tracks)
+
+            for (index, track) in tracks.enumerated() {
+                let compositionTrack: AVMutableCompositionTrack
+                if let existing = compositionTracks[index] {
+                    compositionTrack = existing
+                } else {
+                    guard let newTrack = composition.addMutableTrack(
+                        withMediaType: track.mediaType,
+                        preferredTrackID: kCMPersistentTrackID_Invalid
+                    ) else { continue }
+                    compositionTracks[index] = newTrack
+                    compositionTrack = newTrack
+                }
+                try compositionTrack.insertTimeRange(
+                    CMTimeRange(start: .zero, duration: duration),
+                    of: track,
+                    at: currentTime
+                )
+            }
+            currentTime = CMTimeAdd(currentTime, duration)
+        }
+
+        let outputURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("merged_recording.mov")
+        try? FileManager.default.removeItem(at: outputURL)
+
+        guard let exportSession = AVAssetExportSession(
+            asset: composition, presetName: AVAssetExportPresetHighestQuality
+        ) else {
+            throw NSError(domain: "MeetingManager", code: -1,
+                          userInfo: [NSLocalizedDescriptionKey: "Failed to create export session for merge"])
+        }
+
+        try await exportSession.export(to: outputURL, as: .mov)
         return outputURL
     }
 
@@ -606,6 +707,7 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
         audioFile = nil // Close the file handle
 
         isRecording = false
+        isPaused = false
         amplitudes = Array(repeating: 0.1, count: 5)
 
         guard let wavURL = audioOnlyURL else {

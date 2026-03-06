@@ -15,12 +15,12 @@ enum NBDesign {
     static let buttonFont: Font = .system(size: 14, weight: .heavy, design: .monospaced)
 
     // Colors
-    static let background = Color.white
+    static let background = Color(light: .white, dark: Color(red: 0.05, green: 0.05, blue: 0.05))
     static let foreground = Color.green
     static let accent = Color(red: 1.0, green: 0.2, blue: 0.2)
     static let secondaryAccent = Color(red: 0.0, green: 0.5, blue: 1.0)
-    static let surface = Color.gray.opacity(0.05)
-    static let border = Color.black
+    static let surface = Color(light: Color.gray.opacity(0.08), dark: Color.gray.opacity(0.15))
+    static let border = Color(light: .black, dark: .white)
 
     // Borders
     static let borderWidth: CGFloat = 3

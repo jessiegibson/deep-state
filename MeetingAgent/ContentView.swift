@@ -86,11 +86,11 @@ struct ContentView: View {
                     VStack(alignment: .leading, spacing: NBDesign.smallPadding) {
                         HStack {
                             Circle()
-                                .fill(NBDesign.accent)
+                                .fill(manager.isPaused ? Color.secondary : NBDesign.accent)
                                 .frame(width: 10, height: 10)
-                            Text("RECORDING")
+                            Text(manager.isPaused ? "PAUSED" : "RECORDING")
                                 .font(NBDesign.captionFont)
-                                .foregroundStyle(NBDesign.accent)
+                                .foregroundStyle(manager.isPaused ? Color.secondary : NBDesign.accent)
                         }
 
                         // Live transcript (audio-only mode)
@@ -120,28 +120,47 @@ struct ContentView: View {
                     .frame(minHeight: 60)
                 }
 
-                // Record Button
+                // Record Buttons
                 HStack {
                     Spacer()
-                    Button(manager.isRecording ? "STOP & SAVE" : "START RECORDING") {
-                        Task {
-                            if manager.isRecording {
+                    if manager.isRecording {
+                        Button(manager.isPaused ? "RESUME" : "PAUSE") {
+                            Task {
+                                if manager.isPaused {
+                                    await manager.resumeRecording()
+                                    if manager.recordingMode == .screenAndAudio {
+                                        manager.startMonitoring()
+                                    }
+                                } else {
+                                    await manager.pauseRecording()
+                                    if manager.recordingMode == .screenAndAudio {
+                                        manager.stopMonitoring()
+                                    }
+                                }
+                            }
+                        }
+                        .buttonStyle(NBButtonStyle(color: NBDesign.surface, textColor: NBDesign.foreground))
+
+                        Button("STOP & SAVE") {
+                            Task {
                                 await manager.stopAndTranscribe()
                                 if manager.recordingMode == .screenAndAudio {
                                     manager.stopMonitoring()
                                 }
-                            } else {
+                            }
+                        }
+                        .buttonStyle(NBButtonStyle(color: NBDesign.accent, textColor: NBDesign.background))
+                    } else {
+                        Button("START RECORDING") {
+                            Task {
                                 await manager.start()
                                 if manager.recordingMode == .screenAndAudio {
                                     manager.startMonitoring()
                                 }
                             }
                         }
+                        .buttonStyle(NBButtonStyle(color: NBDesign.foreground, textColor: NBDesign.background))
                     }
-                    .buttonStyle(NBButtonStyle(
-                        color: manager.isRecording ? NBDesign.accent : NBDesign.foreground,
-                        textColor: NBDesign.background
-                    ))
                     Spacer()
                 }
             }
