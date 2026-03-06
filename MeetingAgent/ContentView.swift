@@ -31,9 +31,6 @@ struct ContentView: View {
         }
         .frame(width: 640, height: 480)
         .background(NBDesign.background)
-        .sheet(isPresented: $manager.isNotesSheetOpen) {
-            MeetingNotesSheet(notes: $manager.meetingNotes, title: $manager.meetingTitle, manager: manager)
-        }
     }
 
     @ViewBuilder
@@ -147,7 +144,7 @@ struct RecordingView: View {
                                 .font(NBDesign.bodyFont)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .frame(maxHeight: 100)
+                        .frame(maxHeight: 60)
                         .nbCard()
                     }
 
@@ -167,10 +164,26 @@ struct RecordingView: View {
                 .frame(minHeight: 60)
             }
 
+            // Inline Notes Panel
+            if manager.isRecording && manager.isNotesSheetOpen {
+                inlineNotesPanel
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
             // Record Buttons
             HStack {
                 Spacer()
                 if manager.isRecording {
+                    Button("NOTES") {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            manager.isNotesSheetOpen.toggle()
+                        }
+                    }
+                    .buttonStyle(NBButtonStyle(
+                        color: manager.isNotesSheetOpen ? NBDesign.foreground : NBDesign.surface,
+                        textColor: manager.isNotesSheetOpen ? NBDesign.background : NBDesign.foreground
+                    ))
+
                     Button(manager.isPaused ? "RESUME" : "PAUSE") {
                         Task {
                             if manager.isPaused {
@@ -212,6 +225,36 @@ struct RecordingView: View {
             }
         }
         .padding(NBDesign.padding)
+    }
+
+    private var inlineNotesPanel: some View {
+        VStack(spacing: 0) {
+            TextField("Meeting title (optional)", text: $manager.meetingTitle)
+                .font(NBDesign.bodyFont)
+                .textFieldStyle(.plain)
+                .padding(.horizontal, NBDesign.smallPadding)
+                .padding(.vertical, 6)
+                .background(NBDesign.surface)
+                .overlay(Rectangle().stroke(NBDesign.border, lineWidth: NBDesign.thinBorder))
+
+            ZStack(alignment: .topLeading) {
+                TextEditor(text: $manager.meetingNotes)
+                    .font(NBDesign.bodyFont)
+                    .scrollContentBackground(.hidden)
+                    .padding(4)
+
+                if manager.meetingNotes.isEmpty {
+                    Text("Meeting notes...")
+                        .font(NBDesign.bodyFont)
+                        .foregroundStyle(.secondary.opacity(0.5))
+                        .padding(8)
+                        .allowsHitTesting(false)
+                }
+            }
+            .frame(height: 72)
+            .background(NBDesign.background)
+            .overlay(Rectangle().stroke(NBDesign.border, lineWidth: NBDesign.thinBorder))
+        }
     }
 }
 
@@ -307,7 +350,6 @@ struct TranscriptSheetView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(record.displayTitle)
@@ -340,77 +382,6 @@ struct TranscriptSheetView: View {
             .background(NBDesign.background)
         }
         .frame(width: 600, height: 500)
-        .background(NBDesign.background)
-    }
-}
-
-// MARK: - Meeting Notes Sheet
-
-struct MeetingNotesSheet: View {
-    @Binding var notes: String
-    @Binding var title: String
-    @ObservedObject var manager: MeetingManager
-    @Environment(\.dismiss) var dismiss
-
-    var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            HStack {
-                Text("MEETING NOTES")
-                    .font(NBDesign.headlineFont)
-                Spacer()
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(manager.isPaused ? Color.secondary : NBDesign.accent)
-                        .frame(width: 8, height: 8)
-                    Text(manager.isPaused ? "PAUSED" : "REC")
-                        .font(NBDesign.captionFont)
-                        .foregroundStyle(manager.isPaused ? Color.secondary : NBDesign.accent)
-                }
-                .opacity(manager.isRecording ? 1 : 0)
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 12, weight: .bold))
-                }
-                .buttonStyle(.plain)
-                .padding(8)
-                .overlay(Rectangle().stroke(NBDesign.border, lineWidth: NBDesign.thinBorder))
-            }
-            .padding(NBDesign.padding)
-            .background(NBDesign.foreground)
-
-            // Title field
-            TextField("Meeting title (optional)", text: $title)
-                .font(NBDesign.bodyFont)
-                .textFieldStyle(.plain)
-                .padding(NBDesign.padding)
-                .background(NBDesign.surface)
-                .overlay(
-                    Rectangle()
-                        .stroke(NBDesign.border, lineWidth: NBDesign.thinBorder)
-                )
-
-            // Notes editor
-            ZStack(alignment: .topLeading) {
-                TextEditor(text: $notes)
-                    .font(NBDesign.bodyFont)
-                    .scrollContentBackground(.hidden)
-                    .padding(NBDesign.padding)
-
-                if notes.isEmpty {
-                    Text("Take notes during your meeting...\nThese will be added to the top of the transcript.")
-                        .font(NBDesign.bodyFont)
-                        .foregroundStyle(.secondary.opacity(0.5))
-                        .padding(NBDesign.padding + 4)
-                        .allowsHitTesting(false)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(NBDesign.background)
-        }
-        .frame(width: 520, height: 400)
         .background(NBDesign.background)
     }
 }
