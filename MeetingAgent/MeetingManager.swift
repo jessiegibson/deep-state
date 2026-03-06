@@ -6,6 +6,26 @@ import Combine
 import AVFoundation
 import Speech
 
+// MARK: - Meeting Record Model
+struct MeetingRecord: Identifiable {
+    let id = UUID()
+    let folderURL: URL
+    let folderName: String
+    let title: String?
+    let date: Date
+    let hasAudio: Bool
+    let hasVideo: Bool
+    let transcriptContent: String?
+
+    var displayTitle: String { title ?? folderName }
+
+    var formattedDate: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d, yyyy  h:mm a"
+        return formatter.string(from: date)
+    }
+}
+
 enum RecordingMode: String, CaseIterable {
     case screenAndAudio = "Screen + Audio"
     case audioOnly = "Audio Only"
@@ -55,6 +75,7 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
     @Published var isNotesSheetOpen = false
     @Published var meetingNotes = ""
     @Published var meetingTitle = ""
+    @Published var meetingLibrary: [MeetingRecord] = []
     private var recordingSegments: [URL] = []
     private var segmentCounter = 0
 
@@ -83,20 +104,20 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
     override init() {
         super.init()
         
-        print("🚀 MeetingManager init started")
+        print("MeetingManager init started")
         
         loadSavedFolder()
-        print("✅ Folder loaded")
+        print("Folder loaded")
         
         // 1. Check permissions immediately on startup
         checkPermissions()
-        print("✅ Permissions check completed")
+        print("Permissions check completed")
         
         // 2. Start loading the AI model in the background
         Task { await setupEngine() }
-        print("✅ WhisperKit setup started")
+        print("WhisperKit setup started")
         
-        print("✅ MeetingManager init completed")
+        print("MeetingManager init completed")
     }
     
     
@@ -191,6 +212,7 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
             try? FileManager.default.removeItem(at: audioURL)
             recordingSegments = []
             isNotesSheetOpen = false
+            loadLibrary()
 
         } catch {
             statusMessage = "Processing failed: \(error.localizedDescription)"
@@ -299,6 +321,72 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
         try await exportSession.export(to: outputURL, as: .m4a)
         
         return outputURL
+    }
+
+    // MARK: - Library
+    func loadLibrary() {
+        guard let folderURL = savedFolderURL else { meetingLibrary = []; return }
+        guard folderURL.startAccessingSecurityScopedResource() else { return }
+        defer { folderURL.stopAccessingSecurityScopedResource() }
+
+        let fm = FileManager.default
+        guard let contents = try? fm.contentsOfDirectory(
+            at: folderURL,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: .skipsHiddenFiles
+        ) else { return }
+
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd HH-mm-ss"
+
+        meetingLibrary = contents
+            .filter { url in
+                var isDir = ObjCBool(false)
+                fm.fileExists(atPath: url.path, isDirectory: &isDir)
+                return isDir.boolValue && dateFormatter.date(from: url.lastPathComponent) != nil
+            }
+            .compactMap { parseMeetingRecord(from: $0) }
+            .sorted { $0.date > $1.date }
+    }
+
+    private func parseMeetingRecord(from folderURL: URL) -> MeetingRecord? {
+        let folderName = folderURL.lastPathComponent
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd HH-mm-ss"
+        guard let date = dateFormatter.date(from: folderName) else { return nil }
+
+        let fm = FileManager.default
+        let hasAudio = fm.fileExists(atPath: folderURL.appendingPathComponent("audio.m4a").path)
+        let hasVideo = fm.fileExists(atPath: folderURL.appendingPathComponent("video.mov").path)
+
+        let transcriptURL = folderURL.appendingPathComponent("transcript.md")
+        var title: String? = nil
+        var transcriptContent: String? = nil
+
+        if let content = try? String(contentsOf: transcriptURL, encoding: .utf8) {
+            transcriptContent = content
+            if let firstLine = content.components(separatedBy: "\n").first,
+               firstLine.hasPrefix("# ") {
+                title = String(firstLine.dropFirst(2))
+            }
+        }
+
+        return MeetingRecord(
+            folderURL: folderURL,
+            folderName: folderName,
+            title: title,
+            date: date,
+            hasAudio: hasAudio,
+            hasVideo: hasVideo,
+            transcriptContent: transcriptContent
+        )
+    }
+
+    func openInFinder(_ url: URL) {
+        guard let folderURL = savedFolderURL else { return }
+        guard folderURL.startAccessingSecurityScopedResource() else { return }
+        defer { folderURL.stopAccessingSecurityScopedResource() }
+        NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
     // MARK: - Screen Recording Helper
@@ -772,6 +860,7 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
         try? FileManager.default.removeItem(at: m4aURL)
 
         isNotesSheetOpen = false
+        loadLibrary()
         statusMessage = "Saved successfully"
     }
 
