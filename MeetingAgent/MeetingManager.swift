@@ -52,6 +52,8 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
     private var audioRecorder: AVAudioRecorder?
     private var timer: Timer?
     @Published var isPaused = false
+    @Published var isNotesSheetOpen = false
+    @Published var meetingNotes = ""
     private var recordingSegments: [URL] = []
     private var segmentCounter = 0
 
@@ -122,6 +124,9 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
         segmentCounter = 0
         isPaused = false
 
+        meetingNotes = ""
+        isNotesSheetOpen = true
+
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("temp_rec_0.mov")
         self.lastRecordingURL = url
 
@@ -183,10 +188,12 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
             if recordingSegments.count > 1 { try? FileManager.default.removeItem(at: videoURL) }
             try? FileManager.default.removeItem(at: audioURL)
             recordingSegments = []
+            isNotesSheetOpen = false
 
         } catch {
             statusMessage = "Processing failed: \(error.localizedDescription)"
             isRecording = false
+            isNotesSheetOpen = false
         }
     }
     
@@ -454,10 +461,14 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
             
             var savedFiles: [String] = []
             
-            // Save the transcript
+            // Save the transcript, prepending any meeting notes
             let transcriptFilename = "transcript.md"
             let transcriptFileURL = meetingFolderURL.appendingPathComponent(transcriptFilename)
-            try text.write(to: transcriptFileURL, atomically: true, encoding: .utf8)
+            let trimmedNotes = meetingNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+            let finalText = trimmedNotes.isEmpty
+                ? text
+                : "## Meeting Notes\n\n\(trimmedNotes)\n\n---\n\n## Transcript\n\n\(text)"
+            try finalText.write(to: transcriptFileURL, atomically: true, encoding: .utf8)
             savedFiles.append(transcriptFilename)
             
             // Save the video file if provided
@@ -687,6 +698,8 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
 
             isRecording = true
             liveTranscript = ""
+            meetingNotes = ""
+            isNotesSheetOpen = true
             statusMessage = "Recording (Audio Only)..."
         } catch {
             statusMessage = "Error: \(error.localizedDescription)"
@@ -746,6 +759,7 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
         try? FileManager.default.removeItem(at: wavURL)
         try? FileManager.default.removeItem(at: m4aURL)
 
+        isNotesSheetOpen = false
         statusMessage = "Saved successfully"
     }
 

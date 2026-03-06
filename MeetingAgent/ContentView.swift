@@ -168,5 +168,65 @@ struct ContentView: View {
         }
         .frame(width: 640, height: 480)
         .background(NBDesign.background)
+        .sheet(isPresented: $manager.isNotesSheetOpen) {
+            MeetingNotesSheet(notes: $manager.meetingNotes, manager: manager)
+        }
+    }
+}
+
+struct MeetingNotesSheet: View {
+    @Binding var notes: String
+    @ObservedObject var manager: MeetingManager
+    @Environment(\.dismiss) var dismiss
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Text("MEETING NOTES")
+                    .font(NBDesign.headlineFont)
+                Spacer()
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(manager.isPaused ? Color.secondary : NBDesign.accent)
+                        .frame(width: 8, height: 8)
+                    Text(manager.isPaused ? "PAUSED" : "REC")
+                        .font(NBDesign.captionFont)
+                        .foregroundStyle(manager.isPaused ? Color.secondary : NBDesign.accent)
+                }
+                .opacity(manager.isRecording ? 1 : 0)
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .bold))
+                }
+                .buttonStyle(.plain)
+                .padding(8)
+                .overlay(Rectangle().stroke(NBDesign.border, lineWidth: NBDesign.thinBorder))
+            }
+            .padding(NBDesign.padding)
+            .background(NBDesign.foreground)
+
+            // Notes editor
+            ZStack(alignment: .topLeading) {
+                TextEditor(text: $notes)
+                    .font(NBDesign.bodyFont)
+                    .scrollContentBackground(.hidden)
+                    .padding(NBDesign.padding)
+
+                if notes.isEmpty {
+                    Text("Take notes during your meeting...\nThese will be added to the top of the transcript.")
+                        .font(NBDesign.bodyFont)
+                        .foregroundStyle(.secondary.opacity(0.5))
+                        .padding(NBDesign.padding + 4)
+                        .allowsHitTesting(false)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(NBDesign.background)
+        }
+        .frame(width: 520, height: 380)
+        .background(NBDesign.background)
     }
 }
