@@ -169,13 +169,14 @@ struct ContentView: View {
         .frame(width: 640, height: 480)
         .background(NBDesign.background)
         .sheet(isPresented: $manager.isNotesSheetOpen) {
-            MeetingNotesSheet(notes: $manager.meetingNotes, manager: manager)
+            MeetingNotesSheet(notes: $manager.meetingNotes, title: $manager.meetingTitle, manager: manager)
         }
     }
 }
 
 struct MeetingNotesSheet: View {
     @Binding var notes: String
+    @Binding var title: String
     @ObservedObject var manager: MeetingManager
     @Environment(\.dismiss) var dismiss
 
@@ -208,6 +209,17 @@ struct MeetingNotesSheet: View {
             .padding(NBDesign.padding)
             .background(NBDesign.foreground)
 
+            // Title field
+            TextField("Meeting title (optional)", text: $title)
+                .font(NBDesign.bodyFont)
+                .textFieldStyle(.plain)
+                .padding(NBDesign.padding)
+                .background(NBDesign.surface)
+                .overlay(
+                    Rectangle()
+                        .stroke(NBDesign.border, lineWidth: NBDesign.thinBorder)
+                )
+
             // Notes editor
             ZStack(alignment: .topLeading) {
                 TextEditor(text: $notes)
@@ -226,7 +238,7 @@ struct MeetingNotesSheet: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(NBDesign.background)
         }
-        .frame(width: 520, height: 380)
+        .frame(width: 520, height: 400)
         .background(NBDesign.background)
     }
 }

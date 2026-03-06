@@ -54,6 +54,7 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
     @Published var isPaused = false
     @Published var isNotesSheetOpen = false
     @Published var meetingNotes = ""
+    @Published var meetingTitle = ""
     private var recordingSegments: [URL] = []
     private var segmentCounter = 0
 
@@ -125,6 +126,7 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
         isPaused = false
 
         meetingNotes = ""
+        meetingTitle = ""
         isNotesSheetOpen = true
 
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("temp_rec_0.mov")
@@ -449,9 +451,15 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
         }
         
         let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd-HH-mm-ss"
+        dateFormatter.dateFormat = "yyyy-MM-dd HH-mm-ss"
         let timestamp = dateFormatter.string(from: Date())
-        let meetingFolderName = "meeting-\(timestamp)"
+
+        let titleTrimmed = meetingTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sanitizedTitle = titleTrimmed
+            .components(separatedBy: CharacterSet(charactersIn: "/:\\*?\"<>|"))
+            .joined(separator: "-")
+            .trimmingCharacters(in: CharacterSet(charactersIn: "-").union(.whitespaces))
+        let meetingFolderName = sanitizedTitle.isEmpty ? timestamp : sanitizedTitle
         
         // Create the meeting folder
         let meetingFolderURL = folderURL.appendingPathComponent(meetingFolderName)
@@ -699,6 +707,7 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
             isRecording = true
             liveTranscript = ""
             meetingNotes = ""
+            meetingTitle = ""
             isNotesSheetOpen = true
             statusMessage = "Recording (Audio Only)..."
         } catch {
