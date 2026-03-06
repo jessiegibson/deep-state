@@ -453,13 +453,7 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd HH-mm-ss"
         let timestamp = dateFormatter.string(from: Date())
-
-        let titleTrimmed = meetingTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        let sanitizedTitle = titleTrimmed
-            .components(separatedBy: CharacterSet(charactersIn: "/:\\*?\"<>|"))
-            .joined(separator: "-")
-            .trimmingCharacters(in: CharacterSet(charactersIn: "-").union(.whitespaces))
-        let meetingFolderName = sanitizedTitle.isEmpty ? timestamp : sanitizedTitle
+        let meetingFolderName = timestamp
         
         // Create the meeting folder
         let meetingFolderURL = folderURL.appendingPathComponent(meetingFolderName)
@@ -472,10 +466,14 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
             // Save the transcript, prepending any meeting notes
             let transcriptFilename = "transcript.md"
             let transcriptFileURL = meetingFolderURL.appendingPathComponent(transcriptFilename)
+            let titleTrimmed = meetingTitle.trimmingCharacters(in: .whitespacesAndNewlines)
             let trimmedNotes = meetingNotes.trimmingCharacters(in: .whitespacesAndNewlines)
-            let finalText = trimmedNotes.isEmpty
+            var sections: [String] = []
+            if !titleTrimmed.isEmpty { sections.append("# \(titleTrimmed)") }
+            if !trimmedNotes.isEmpty { sections.append("## Meeting Notes\n\n\(trimmedNotes)") }
+            let finalText = sections.isEmpty
                 ? text
-                : "## Meeting Notes\n\n\(trimmedNotes)\n\n---\n\n## Transcript\n\n\(text)"
+                : sections.joined(separator: "\n\n---\n\n") + "\n\n---\n\n## Transcript\n\n\(text)"
             try finalText.write(to: transcriptFileURL, atomically: true, encoding: .utf8)
             savedFiles.append(transcriptFilename)
             
