@@ -68,30 +68,55 @@ struct SpeakerVoicePrint: Codable {
 
 // MARK: - Voice Analytics Collector
 
-/// Collects SFVoiceAnalytics data from live SFSpeechRecognizer results
+/// Collects SFVoiceAnalytics data from live SFSpeechRecognizer results.
+///
+/// Uses `SFSpeechRecognitionMetadata.voiceAnalytics` (non-deprecated, macOS 11.3+),
+/// which provides frame-level analytics for the entire result. We map those frames
+/// back to individual transcription segments using timestamp proportions, giving us
+/// per-segment feature vectors without touching the deprecated segment-level API.
+///
+/// `speechRecognitionMetadata` is only populated on final results, which is fine —
+/// we only cluster after recording stops, not in real time.
 final class VoiceAnalyticsCollector {
     private(set) var vectors: [VoiceFeatureVector] = []
 
     func ingest(result: SFSpeechRecognitionResult) {
-        // SFSpeechRecognitionMetadata (macOS 11.3+) is the preferred source for voice analytics
-        let transcriptionSegments = result.bestTranscription.segments
+        // Only process final results — metadata is nil on partial results
+        guard let metadata = result.speechRecognitionMetadata,
+              let analytics = metadata.voiceAnalytics else { return }
 
-        // voiceAnalytics on SFTranscriptionSegment is deprecated in favour of SFSpeechRecognitionMetadata,
-        // but SFSpeechRecognitionMetadata provides only a single analytics object per result (not per
-        // segment), so per-segment analytics via SFTranscriptionSegment is the only way to get
-        // fine-grained clustering data. Suppress the deprecation warning intentionally.
-        for segment in transcriptionSegments {
-            // swiftlint:disable:next deprecated_over_to_string
-            let analytics = segment.voiceAnalytics
-            guard let analytics else { continue }
+        let segments = result.bestTranscription.segments
+        guard let lastSegment = segments.last else { return }
 
+        let totalDuration = lastSegment.timestamp + lastSegment.duration
+        guard totalDuration > 0 else { return }
+
+        let pitchFrames   = analytics.pitch.acousticFeatureValuePerFrame
+        let voicingFrames = analytics.voicing.acousticFeatureValuePerFrame
+        let jitterFrames  = analytics.jitter.acousticFeatureValuePerFrame
+        let shimmerFrames = analytics.shimmer.acousticFeatureValuePerFrame
+        let frameCount    = Double(pitchFrames.count)
+        guard frameCount > 0 else { return }
+
+        // Replace any earlier partial-result vectors for this utterance with
+        // the accurate final-result data
+        vectors.removeAll()
+
+        for segment in segments {
+            let startFrac = segment.timestamp / totalDuration
+            let endFrac   = min((segment.timestamp + segment.duration) / totalDuration, 1.0)
+            let startIdx  = Int(startFrac * frameCount)
+            let endIdx    = min(Int(endFrac * frameCount), pitchFrames.count - 1)
+            guard startIdx < endIdx else { continue }
+
+            let range = startIdx...endIdx
             let vector = VoiceFeatureVector(
-                pitch: analytics.pitch.acousticFeatureValuePerFrame.map { $0 }.mean(),
-                voicing: analytics.voicing.acousticFeatureValuePerFrame.map { $0 }.mean(),
-                jitter: analytics.jitter.acousticFeatureValuePerFrame.map { $0 }.mean(),
-                shimmer: analytics.shimmer.acousticFeatureValuePerFrame.map { $0 }.mean(),
+                pitch:    pitchFrames[range].mean(),
+                voicing:  voicingFrames[range].mean(),
+                jitter:   jitterFrames[range].mean(),
+                shimmer:  shimmerFrames[range].mean(),
                 timestamp: segment.timestamp,
-                duration: segment.duration
+                duration:  segment.duration
             )
             if vector.pitch > 0 || vector.voicing > 0 {
                 vectors.append(vector)
@@ -333,16 +358,9 @@ final class VoicePrintStore {
 
 // MARK: - Helpers
 
-private extension Array where Element == Double {
+private extension Collection where Element == Double {
     func mean() -> Double {
         guard !isEmpty else { return 0 }
         return reduce(0, +) / Double(count)
-    }
-}
-
-private extension Array where Element == NSNumber {
-    func mean() -> Double {
-        guard !isEmpty else { return 0 }
-        return map { $0.doubleValue }.reduce(0, +) / Double(count)
     }
 }
