@@ -29,7 +29,7 @@ struct ContentView: View {
                 LibraryView(manager: manager)
             }
         }
-        .frame(width: 640, height: 480)
+        .frame(minWidth: 640, minHeight: 480)
         .background(NBDesign.background)
     }
 
@@ -254,6 +254,9 @@ struct RecordingView: View {
             .frame(height: 72)
             .background(NBDesign.background)
             .overlay(Rectangle().stroke(NBDesign.border, lineWidth: NBDesign.thinBorder))
+        }
+        .sheet(isPresented: $manager.isSpeakerLabelingOpen) {
+            SpeakerLabelingView(manager: manager)
         }
     }
 }

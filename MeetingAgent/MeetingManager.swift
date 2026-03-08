@@ -79,6 +79,12 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
     private var recordingSegments: [URL] = []
     private var segmentCounter = 0
 
+    // Speaker diarization
+    private let analyticsCollector = VoiceAnalyticsCollector()
+    private var rawTranscriptionSegments: [SFTranscriptionSegment] = []
+    @Published var speakerSegments: [SpeakerSegment] = []
+    @Published var isSpeakerLabelingOpen = false
+
     func checkPermissions() {
         // Microphone Check
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
@@ -751,11 +757,17 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
             request.requiresOnDeviceRecognition = true
             self.recognitionRequest = request
 
-            recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
+            analyticsCollector.reset()
+            rawTranscriptionSegments = []
+
+        recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
                 guard let self = self else { return }
                 if let result = result {
+                    self.analyticsCollector.ingest(result: result)
+                    let segments = result.bestTranscription.segments
                     Task { @MainActor in
                         self.liveTranscript = result.bestTranscription.formattedString
+                        self.rawTranscriptionSegments = segments
                     }
                 }
                 if let error = error {
@@ -852,6 +864,32 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
             transcriptText = await transcribeAudio(audioURL: m4aURL)
         }
 
+        // Run speaker diarization if we captured voice analytics
+        let vectors = analyticsCollector.vectors
+        if !vectors.isEmpty && !rawTranscriptionSegments.isEmpty {
+            statusMessage = "Identifying speakers..."
+            let segments = SpeakerSegmentBuilder.build(
+                from: vectors,
+                transcriptionSegments: rawTranscriptionSegments
+            )
+            // Pre-match against known voice prints
+            speakerSegments = segments.map { seg in
+                var s = seg
+                if let match = VoicePrintStore.shared.match(seg.features) {
+                    s.speakerName = match.name
+                }
+                return s
+            }
+            if speakerSegments.count > 1 {
+                // Store audio URL for saving after labeling
+                self.audioOnlyURL = m4aURL
+                isSpeakerLabelingOpen = true
+                // stopAudioOnly returns here; saving happens in finalizeWithSpeakerLabels()
+                try? FileManager.default.removeItem(at: wavURL)
+                return
+            }
+        }
+
         statusMessage = "Saving files..."
         saveTranscript(text: transcriptText, videoURL: nil, audioURL: m4aURL)
 
@@ -927,6 +965,47 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
                 continuation.resume(returning: status == .authorized)
             }
         }
+    }
+
+    // MARK: - Speaker Diarization
+
+    /// Called by SpeakerLabelingView when user finishes naming speakers
+    func finalizeWithSpeakerLabels(_ labeledSegments: [SpeakerSegment]) {
+        let transcriptText = buildDiarizedTranscript(from: labeledSegments)
+
+        // Update voice prints for named speakers
+        for segment in labeledSegments {
+            guard let name = segment.speakerName else { continue }
+            VoicePrintStore.shared.upsert(name: name, features: segment.features)
+        }
+
+        statusMessage = "Saving files..."
+        saveTranscript(text: transcriptText, videoURL: nil, audioURL: audioOnlyURL)
+
+        if let m4a = audioOnlyURL { try? FileManager.default.removeItem(at: m4a) }
+        audioOnlyURL = nil
+        speakerSegments = []
+        isSpeakerLabelingOpen = false
+        isNotesSheetOpen = false
+        statusMessage = "Saved successfully"
+    }
+
+    func cancelSpeakerLabeling() {
+        // Save without speaker labels using plain transcript
+        saveTranscript(text: liveTranscript, videoURL: nil, audioURL: audioOnlyURL)
+        if let m4a = audioOnlyURL { try? FileManager.default.removeItem(at: m4a) }
+        audioOnlyURL = nil
+        speakerSegments = []
+        isSpeakerLabelingOpen = false
+        isNotesSheetOpen = false
+        statusMessage = "Saved successfully"
+    }
+
+    private func buildDiarizedTranscript(from segments: [SpeakerSegment]) -> String {
+        guard !segments.isEmpty else { return liveTranscript }
+        return segments.map { seg in
+            "**\(seg.displayName):** \(seg.text)"
+        }.joined(separator: "\n\n")
     }
 
     // MARK: - Delegate Method
