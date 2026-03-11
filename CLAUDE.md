@@ -126,6 +126,12 @@ See `documentation/INFO_PLIST_URGENT.md` for permission setup details.
 - Voice prints updated after each labeled meeting (incremental learning)
 - `SFVoiceAnalytics.voiceAnalytics` on `SFTranscriptionSegment` is deprecated in macOS 11.3 (moved to `SFSpeechRecognitionMetadata`) but used intentionally — it's the only API that provides per-segment analytics needed for clustering
 
+### Screen Recording File Finalization Fix
+- `SCRecordingOutput` does NOT finalize the MOV file when `stopCapture()` returns — the moov atom is unwritten, making the file unreadable ("cannot open" error)
+- Fix: call `removeRecordingOutput()` before `stopCapture()`, then `await` the `didFinishRecordingTo:` delegate callback via `CheckedContinuation` before processing
+- This applies to both stop and pause flows — any time we need the recorded file to be valid, we must wait for finalization
+- **Rule**: Never access an `SCRecordingOutput` file until the `didFinishRecordingTo:` delegate has fired
+
 ### Window Resizability
 - Removed fixed `frame(width:height:)` from `ContentView`; replaced with `frame(minWidth:minHeight:)`
 - Changed `MeetingManagerApp` to `.windowResizability(.contentMinSize)` so the window can be freely resized

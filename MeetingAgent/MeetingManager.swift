@@ -51,6 +51,12 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
         didSet { UserDefaults.standard.set(shouldRecordSystemAudio, forKey: "pref_record_audio") }
     }
 
+    // LLM summarization
+    let llmSettings = LLMSettings.shared
+    @Published var isSummarizing = false
+    @Published var summaryResult: String? = nil
+    @Published var summaryError: String? = nil
+
     private var stream: SCStream?
     private var recordingOutput: SCRecordingOutput?
     private var lastRecordingURL: URL?
@@ -78,6 +84,7 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
     @Published var meetingLibrary: [MeetingRecord] = []
     private var recordingSegments: [URL] = []
     private var segmentCounter = 0
+    private var recordingFinishedContinuation: CheckedContinuation<Void, Never>?
 
     // Speaker diarization
     private let analyticsCollector = VoiceAnalyticsCollector()
@@ -179,7 +186,16 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
         isPaused = false
 
         do {
+            // Remove recording output to trigger file finalization, then wait for delegate callback
+            if let s = stream, let ro = recordingOutput {
+                try s.removeRecordingOutput(ro)
+                await withCheckedContinuation { continuation in
+                    self.recordingFinishedContinuation = continuation
+                }
+            }
             try await stream?.stopCapture()
+            stream = nil
+            recordingOutput = nil
             isRecording = false
 
             if let currentURL = lastRecordingURL {
@@ -238,7 +254,16 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
             statusMessage = "Paused"
         } else {
             do {
+                // Remove recording output to finalize the segment file before pausing
+                if let s = stream, let ro = recordingOutput {
+                    try s.removeRecordingOutput(ro)
+                    await withCheckedContinuation { continuation in
+                        self.recordingFinishedContinuation = continuation
+                    }
+                }
                 try await stream?.stopCapture()
+                stream = nil
+                recordingOutput = nil
                 if let url = lastRecordingURL {
                     recordingSegments.append(url)
                 }
@@ -282,14 +307,16 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
             print("❌ WhisperKit model not loaded")
             return "Transcription unavailable - AI model not loaded"
         }
-        
+
         do {
             print("🎤 Transcribing audio file...")
             let results = try await whisper.transcribe(audioPath: audioURL.path)
-            
-            if let text = results.first?.text, !text.isEmpty {
-                print("✅ Transcription successful: \(text.count) characters")
-                return text
+
+            if let first = results.first, !first.text.isEmpty {
+                print("✅ Transcription successful: \(first.text.count) characters")
+                // Format into paragraphs using silence gaps between segments
+                let formatted = TranscriptFormatter.format(segments: first.segments)
+                return formatted.isEmpty ? first.text : formatted
             } else {
                 print("⚠️ No speech detected in audio")
                 return "No speech detected in recording"
@@ -298,6 +325,22 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
             print("❌ Transcription error: \(error.localizedDescription)")
             return "Transcription failed: \(error.localizedDescription)"
         }
+    }
+
+    // MARK: - LLM Summarization
+    func summarize(transcript: String, template: SummaryTemplate) async {
+        isSummarizing = true
+        summaryResult = nil
+        summaryError = nil
+
+        do {
+            let provider = try llmSettings.summaryLLM()
+            let result = try await provider.complete(systemPrompt: template.systemPrompt, userContent: transcript)
+            summaryResult = result
+        } catch {
+            summaryError = error.localizedDescription
+        }
+        isSummarizing = false
     }
 
     
@@ -858,7 +901,11 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
         // Use live transcript if available, otherwise transcribe with WhisperKit
         let transcriptText: String
         if !liveTranscript.isEmpty {
-            transcriptText = liveTranscript
+            // Format live transcript segments into paragraphs
+            let formatted = rawTranscriptionSegments.isEmpty
+                ? TranscriptFormatter.formatPlainText(liveTranscript)
+                : TranscriptFormatter.format(sfSegments: rawTranscriptionSegments)
+            transcriptText = formatted.isEmpty ? liveTranscript : formatted
         } else {
             statusMessage = "Transcribing with AI..."
             transcriptText = await transcribeAudio(audioURL: m4aURL)
@@ -1008,10 +1055,19 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
         }.joined(separator: "\n\n")
     }
 
-    // MARK: - Delegate Method
-    // CRITICAL: Must be nonisolated because SCKit calls this on a background thread
+    // MARK: - Delegate Methods
+    // CRITICAL: Must be nonisolated because SCKit calls these on a background thread
+    nonisolated func recordingOutput(_ recordingOutput: SCRecordingOutput, didFinishRecordingTo url: URL) {
+        Task { @MainActor in
+            self.recordingFinishedContinuation?.resume()
+            self.recordingFinishedContinuation = nil
+        }
+    }
+
     nonisolated func recordingOutput(_ recordingOutput: SCRecordingOutput, didFailWithError error: Error) {
         Task { @MainActor in
+            self.recordingFinishedContinuation?.resume()
+            self.recordingFinishedContinuation = nil
             self.statusMessage = "Recorder Error: \(error.localizedDescription)"
             self.isRecording = false
         }
