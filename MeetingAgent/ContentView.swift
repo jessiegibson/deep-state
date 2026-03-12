@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 enum AppView { case record, library }
 
@@ -7,6 +8,7 @@ enum AppView { case record, library }
 struct ContentView: View {
     @StateObject var manager = MeetingManager()
     @State private var activeView: AppView = .record
+    @State private var isSettingsOpen = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -18,9 +20,23 @@ struct ContentView: View {
                     tabButton("RECORD", tab: .record)
                     tabButton("LIBRARY", tab: .library)
                 }
+                Button {
+                    isSettingsOpen = true
+                } label: {
+                    Image(systemName: "gear")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(NBDesign.background)
+                }
+                .buttonStyle(.plain)
+                .padding(8)
+                .overlay(Rectangle().stroke(NBDesign.background.opacity(0.3), lineWidth: NBDesign.thinBorder))
+                .padding(.leading, 8)
             }
             .padding(NBDesign.padding)
             .background(NBDesign.foreground)
+            .sheet(isPresented: $isSettingsOpen) {
+                LLMSettingsView(settings: manager.llmSettings)
+            }
 
             switch activeView {
             case .record:
@@ -29,7 +45,7 @@ struct ContentView: View {
                 LibraryView(manager: manager)
             }
         }
-        .frame(width: 640, height: 480)
+        .frame(minWidth: 640, minHeight: 480)
         .background(NBDesign.background)
     }
 
@@ -91,8 +107,8 @@ struct RecordingView: View {
                     }
                 }
             }
-            .disabled(manager.isRecording)
-            .opacity(manager.isRecording ? 0.5 : 1.0)
+            .disabled(manager.isRecording || manager.isImporting)
+            .opacity(manager.isRecording || manager.isImporting ? 0.5 : 1.0)
 
             // Save Location
             VStack(alignment: .leading, spacing: 4) {
@@ -151,6 +167,19 @@ struct RecordingView: View {
                     VoiceVisualizer(amplitudes: manager.amplitudes)
                 }
                 .transition(.opacity)
+            } else if manager.isImporting {
+                VStack(spacing: NBDesign.smallPadding) {
+                    Spacer()
+                    ProgressView()
+                        .controlSize(.small)
+                    Text(manager.importProgress.uppercased())
+                        .font(NBDesign.bodyFont)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                    Spacer()
+                }
+                .frame(minHeight: 60)
             } else {
                 VStack {
                     Spacer()
@@ -211,6 +240,12 @@ struct RecordingView: View {
                     }
                     .buttonStyle(NBButtonStyle(color: NBDesign.accent, textColor: NBDesign.background))
                 } else {
+                    Button("IMPORT") {
+                        Task { await manager.importFiles() }
+                    }
+                    .buttonStyle(NBButtonStyle(color: NBDesign.surface, textColor: NBDesign.foreground))
+                    .disabled(manager.isImporting || manager.savedFolderURL == nil)
+
                     Button("START RECORDING") {
                         Task {
                             await manager.start()
@@ -220,11 +255,15 @@ struct RecordingView: View {
                         }
                     }
                     .buttonStyle(NBButtonStyle(color: NBDesign.foreground, textColor: NBDesign.background))
+                    .disabled(manager.isImporting)
                 }
                 Spacer()
             }
         }
         .padding(NBDesign.padding)
+        .sheet(isPresented: $manager.isSpeakerLabelingOpen) {
+            SpeakerLabelingView(manager: manager)
+        }
     }
 
     private var inlineNotesPanel: some View {
@@ -263,9 +302,77 @@ struct RecordingView: View {
 struct LibraryView: View {
     @ObservedObject var manager: MeetingManager
     @State private var selectedRecord: MeetingRecord? = nil
+    @State private var isSelectionMode = false
+    @State private var selectedFolderURLs: Set<String> = []
 
     var body: some View {
-        Group {
+        VStack(spacing: 0) {
+            // Library toolbar
+            HStack {
+                if isSelectionMode {
+                    Text("\(selectedFolderURLs.count) SELECTED")
+                        .font(NBDesign.captionFont)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if !selectedFolderURLs.isEmpty {
+                        Button(manager.isRetranscribing ? "RETRANSCRIBING..." : "RETRANSCRIBE SELECTED") {
+                            let records = manager.meetingLibrary.filter {
+                                selectedFolderURLs.contains($0.folderURL.path)
+                            }
+                            Task { await manager.retranscribeBatch(records: records) }
+                        }
+                        .font(NBDesign.captionFont)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .foregroundStyle(NBDesign.background)
+                        .background(NBDesign.foreground)
+                        .overlay(Rectangle().stroke(NBDesign.border, lineWidth: NBDesign.thinBorder))
+                        .buttonStyle(.plain)
+                        .disabled(manager.isRetranscribing)
+                    }
+                    Button("DONE") {
+                        isSelectionMode = false
+                        selectedFolderURLs = []
+                    }
+                    .font(NBDesign.captionFont)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .overlay(Rectangle().stroke(NBDesign.border, lineWidth: NBDesign.thinBorder))
+                    .buttonStyle(.plain)
+                } else {
+                    Spacer()
+                    if !manager.meetingLibrary.isEmpty {
+                        Button("SELECT") {
+                            isSelectionMode = true
+                        }
+                        .font(NBDesign.captionFont)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .overlay(Rectangle().stroke(NBDesign.border, lineWidth: NBDesign.thinBorder))
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .padding(.horizontal, NBDesign.padding)
+            .padding(.vertical, NBDesign.smallPadding)
+
+            // Retranscribe progress bar
+            if manager.isRetranscribing {
+                HStack(spacing: NBDesign.smallPadding) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text(manager.retranscribeProgress.uppercased())
+                        .font(NBDesign.captionFont)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, NBDesign.padding)
+                .padding(.bottom, NBDesign.smallPadding)
+            }
+
+            Rectangle()
+                .fill(NBDesign.border)
+                .frame(height: NBDesign.thinBorder)
+
             if manager.meetingLibrary.isEmpty {
                 VStack {
                     Spacer()
@@ -279,10 +386,34 @@ struct LibraryView: View {
                 ScrollView {
                     LazyVStack(spacing: 0) {
                         ForEach(manager.meetingLibrary) { record in
-                            MeetingRecordRow(record: record) {
-                                selectedRecord = record
-                            } onOpen: {
-                                manager.openInFinder(record.folderURL)
+                            HStack(spacing: 0) {
+                                if isSelectionMode {
+                                    Button {
+                                        let path = record.folderURL.path
+                                        if selectedFolderURLs.contains(path) {
+                                            selectedFolderURLs.remove(path)
+                                        } else {
+                                            selectedFolderURLs.insert(path)
+                                        }
+                                    } label: {
+                                        Image(systemName: selectedFolderURLs.contains(record.folderURL.path)
+                                              ? "checkmark.square.fill" : "square")
+                                            .font(.system(size: 16, weight: .bold))
+                                            .foregroundStyle(NBDesign.foreground)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .padding(.leading, NBDesign.padding)
+                                }
+
+                                MeetingRecordRow(
+                                    record: record,
+                                    isRetranscribing: manager.isRetranscribing,
+                                    onViewTranscript: { selectedRecord = record },
+                                    onOpen: { manager.openInFinder(record.folderURL) },
+                                    onRetranscribe: {
+                                        Task { await manager.retranscribe(record: record) }
+                                    }
+                                )
                             }
                             Rectangle()
                                 .fill(NBDesign.border)
@@ -293,7 +424,9 @@ struct LibraryView: View {
             }
         }
         .sheet(item: $selectedRecord) { record in
-            TranscriptSheetView(record: record)
+            TranscriptSheetView(record: record, savedFolderURL: manager.savedFolderURL) {
+                Task { await manager.retranscribe(record: record) }
+            }
         }
     }
 }
@@ -302,8 +435,10 @@ struct LibraryView: View {
 
 struct MeetingRecordRow: View {
     let record: MeetingRecord
+    let isRetranscribing: Bool
     let onViewTranscript: () -> Void
     let onOpen: () -> Void
+    let onRetranscribe: () -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: NBDesign.padding) {
@@ -322,12 +457,21 @@ struct MeetingRecordRow: View {
             VStack(alignment: .trailing, spacing: 6) {
                 Button("VIEW") { onViewTranscript() }
                     .buttonStyle(NBButtonStyle(color: NBDesign.foreground, textColor: NBDesign.background))
-                Button("OPEN") { onOpen() }
-                    .font(NBDesign.captionFont)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .overlay(Rectangle().stroke(NBDesign.border, lineWidth: NBDesign.thinBorder))
-                    .buttonStyle(.plain)
+                HStack(spacing: 6) {
+                    Button(isRetranscribing ? "..." : "RETRANSCRIBE") { onRetranscribe() }
+                        .font(NBDesign.captionFont)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .overlay(Rectangle().stroke(NBDesign.border, lineWidth: NBDesign.thinBorder))
+                        .buttonStyle(.plain)
+                        .disabled(isRetranscribing || !record.hasAudio)
+                    Button("OPEN") { onOpen() }
+                        .font(NBDesign.captionFont)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .overlay(Rectangle().stroke(NBDesign.border, lineWidth: NBDesign.thinBorder))
+                        .buttonStyle(.plain)
+                }
             }
         }
         .padding(NBDesign.padding)
@@ -346,10 +490,20 @@ struct MeetingRecordRow: View {
 
 struct TranscriptSheetView: View {
     let record: MeetingRecord
+    let savedFolderURL: URL?
+    let onRetranscribe: (() -> Void)?
     @Environment(\.dismiss) var dismiss
+    @StateObject private var vm = TranscriptSheetViewModel()
+
+    init(record: MeetingRecord, savedFolderURL: URL? = nil, onRetranscribe: (() -> Void)? = nil) {
+        self.record = record
+        self.savedFolderURL = savedFolderURL
+        self.onRetranscribe = onRetranscribe
+    }
 
     var body: some View {
         VStack(spacing: 0) {
+            // Header
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(record.displayTitle)
@@ -359,6 +513,13 @@ struct TranscriptSheetView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
+                if let onRetranscribe = onRetranscribe, record.hasAudio {
+                    Button("RETRANSCRIBE") {
+                        onRetranscribe()
+                        dismiss()
+                    }
+                    .buttonStyle(NBButtonStyle(color: NBDesign.surface, textColor: NBDesign.foreground))
+                }
                 Button {
                     dismiss()
                 } label: {
@@ -374,14 +535,125 @@ struct TranscriptSheetView: View {
             .overlay(Rectangle().stroke(NBDesign.border, lineWidth: NBDesign.thinBorder))
 
             ScrollView {
-                Text(record.transcriptContent ?? "No transcript available")
-                    .font(NBDesign.bodyFont)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(NBDesign.padding)
+                VStack(alignment: .leading, spacing: NBDesign.padding) {
+                    // Transcript content
+                    Text(record.transcriptContent ?? "No transcript available")
+                        .font(NBDesign.bodyFont)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    // Summarize section
+                    VStack(alignment: .leading, spacing: NBDesign.smallPadding) {
+                        Text("SUMMARIZE")
+                            .font(NBDesign.captionFont)
+                            .foregroundStyle(.secondary)
+
+                        // Template picker
+                        HStack(spacing: 0) {
+                            ForEach(SummaryTemplate.allCases) { template in
+                                Button(template.rawValue.uppercased()) {
+                                    vm.selectedTemplate = template
+                                }
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 5)
+                                .foregroundStyle(vm.selectedTemplate == template ? NBDesign.background : NBDesign.foreground)
+                                .background(vm.selectedTemplate == template ? NBDesign.foreground : NBDesign.surface)
+                                .overlay(Rectangle().stroke(NBDesign.border, lineWidth: NBDesign.thinBorder))
+                            }
+                        }
+
+                        HStack {
+                            Button(vm.isSummarizing ? "SUMMARIZING..." : "RUN SUMMARY") {
+                                guard let transcript = record.transcriptContent else { return }
+                                Task {
+                                    await vm.summarize(
+                                        transcript: transcript,
+                                        folderURL: record.folderURL,
+                                        savedFolderURL: savedFolderURL
+                                    )
+                                }
+                            }
+                            .buttonStyle(NBButtonStyle(color: NBDesign.foreground, textColor: NBDesign.background))
+                            .disabled(vm.isSummarizing || record.transcriptContent == nil)
+                        }
+
+                        if let error = vm.error {
+                            Text(error)
+                                .font(NBDesign.captionFont)
+                                .foregroundStyle(NBDesign.accent)
+                                .nbCard()
+                        }
+
+                        if let summary = vm.summaryResult {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("SUMMARY (\(vm.selectedTemplate.rawValue.uppercased()))")
+                                    .font(NBDesign.captionFont)
+                                    .foregroundStyle(.secondary)
+                                Text(summary)
+                                    .font(NBDesign.bodyFont)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .nbCard()
+                        }
+                    }
+                }
+                .padding(NBDesign.padding)
             }
             .background(NBDesign.background)
         }
-        .frame(width: 600, height: 500)
+        .frame(width: 640, height: 600)
         .background(NBDesign.background)
+    }
+}
+
+// MARK: - Transcript Sheet ViewModel
+
+@MainActor
+class TranscriptSheetViewModel: ObservableObject {
+    @Published var selectedTemplate: SummaryTemplate = .general
+    @Published var isSummarizing = false
+    @Published var summaryResult: String? = nil
+    @Published var error: String? = nil
+
+    func summarize(transcript: String, folderURL: URL, savedFolderURL: URL?) async {
+        isSummarizing = true
+        summaryResult = nil
+        error = nil
+
+        do {
+            let provider = try LLMSettings.shared.summaryLLM()
+            let result = try await provider.complete(
+                systemPrompt: selectedTemplate.systemPrompt,
+                userContent: transcript
+            )
+            summaryResult = result
+            saveSummaryToFile(summary: result, template: selectedTemplate, folderURL: folderURL, savedFolderURL: savedFolderURL)
+        } catch {
+            self.error = error.localizedDescription
+        }
+        isSummarizing = false
+    }
+
+    private func saveSummaryToFile(summary: String, template: SummaryTemplate, folderURL: URL, savedFolderURL: URL?) {
+        let accessGranted = savedFolderURL?.startAccessingSecurityScopedResource() ?? false
+        defer { if accessGranted { savedFolderURL?.stopAccessingSecurityScopedResource() } }
+
+        let transcriptURL = folderURL.appendingPathComponent("transcript.md")
+        let summarySection = "## Summary (\(template.rawValue))\n\n\(summary)"
+
+        guard var content = try? String(contentsOf: transcriptURL, encoding: .utf8) else {
+            // No existing file — write just the summary
+            try? summarySection.write(to: transcriptURL, atomically: true, encoding: .utf8)
+            return
+        }
+
+        // Replace existing summary section if present, otherwise append
+        if let range = content.range(of: "\n\n---\n\n## Summary") {
+            // Remove everything from the summary separator onward
+            content = String(content[content.startIndex..<range.lowerBound])
+        }
+
+        content += "\n\n---\n\n\(summarySection)"
+        try? content.write(to: transcriptURL, atomically: true, encoding: .utf8)
     }
 }

@@ -23,6 +23,6 @@ struct MeetingAgentApp: App {
                 )
             }
         }
-        .windowResizability(.contentSize)
+        .windowResizability(.contentMinSize)
     }
 }

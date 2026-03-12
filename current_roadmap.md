@@ -107,3 +107,37 @@ Prepare for distribution: proper code signing, sandboxing review, App Store meta
 - Integrate with Obsidian.
 - Develop an iOS mobile application
 
+---
+
+## Phase 5 — New Feature Ideas (2026-03-09)
+
+### 5.1 Full-Text Meeting Search
+Search bar in Library view that queries across all saved `transcript.md` files. Index transcripts using SQLite FTS5 or Core Data for sub-second results across thousands of recordings.
+
+### 5.2 Export Formats
+One-click export from Library detail view: PDF (formatted with title, date, speaker labels), DOCX, SRT (subtitle format synced to audio timestamps for video review), and plain text.
+
+### 5.3 Menu Bar Mode
+`NSStatusItem` presence for quick start/stop without opening the main window. Shows a recording timer in the menu bar and a mini popover with the live transcript snippet.
+
+### 5.4 Calendar Auto-Linking
+EventKit integration to pull today's calendar events. Pre-fill meeting title from the active event name. Show upcoming meetings in the recorder as one-tap shortcuts to name the recording.
+
+### 5.5 Meeting Analytics Dashboard
+Per-session stats: speaker talk-time pie chart, word count, speaking pace (words/min), and paragraph-level sentiment (positive / neutral / concern). Shown in the Library detail panel.
+
+### 5.6 Obsidian Integration
+Export transcript as Obsidian-compatible markdown: YAML frontmatter (date, speakers, tags), wiki-links for speaker names (`[[Alex]]`), and a backlink to the audio file path. One-click export to the user's configured Obsidian vault.
+
+### 5.7 Smart Chapters
+Detect topic-shift boundaries in the transcript using an LLM and auto-insert chapter headers (`## Chapter: Budget Discussion`) with anchor links. Useful for long recordings.
+
+### 5.8 Batch Re-Transcribe
+Re-run WhisperKit on existing `audio.m4a` files in Library — useful after a model upgrade or when changing the transcription language. Background queue with progress indicator.
+
+### 5.9 Webhook / Zapier Integration
+After each recording is saved, POST a JSON payload (title, date, transcript, summary) to a user-configured webhook URL. Enables automation to Slack, Notion, Airtable, Linear, and Zapier.
+
+### 5.10 Rust-Powered Search Index
+Full-text search index built in Rust (Swift-Rust FFI via `SwiftRust` or an XPC service) for sub-millisecond search across tens of thousands of meetings. Pre-planned for the Rust integration phase.
+
