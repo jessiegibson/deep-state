@@ -424,7 +424,7 @@ struct LibraryView: View {
             }
         }
         .sheet(item: $selectedRecord) { record in
-            TranscriptSheetView(record: record) {
+            TranscriptSheetView(record: record, savedFolderURL: manager.savedFolderURL) {
                 Task { await manager.retranscribe(record: record) }
             }
         }
@@ -490,12 +490,14 @@ struct MeetingRecordRow: View {
 
 struct TranscriptSheetView: View {
     let record: MeetingRecord
+    let savedFolderURL: URL?
     let onRetranscribe: (() -> Void)?
     @Environment(\.dismiss) var dismiss
     @StateObject private var vm = TranscriptSheetViewModel()
 
-    init(record: MeetingRecord, onRetranscribe: (() -> Void)? = nil) {
+    init(record: MeetingRecord, savedFolderURL: URL? = nil, onRetranscribe: (() -> Void)? = nil) {
         self.record = record
+        self.savedFolderURL = savedFolderURL
         self.onRetranscribe = onRetranscribe
     }
 
@@ -563,7 +565,13 @@ struct TranscriptSheetView: View {
                         HStack {
                             Button(vm.isSummarizing ? "SUMMARIZING..." : "RUN SUMMARY") {
                                 guard let transcript = record.transcriptContent else { return }
-                                Task { await vm.summarize(transcript: transcript) }
+                                Task {
+                                    await vm.summarize(
+                                        transcript: transcript,
+                                        folderURL: record.folderURL,
+                                        savedFolderURL: savedFolderURL
+                                    )
+                                }
                             }
                             .buttonStyle(NBButtonStyle(color: NBDesign.foreground, textColor: NBDesign.background))
                             .disabled(vm.isSummarizing || record.transcriptContent == nil)
@@ -607,7 +615,7 @@ class TranscriptSheetViewModel: ObservableObject {
     @Published var summaryResult: String? = nil
     @Published var error: String? = nil
 
-    func summarize(transcript: String) async {
+    func summarize(transcript: String, folderURL: URL, savedFolderURL: URL?) async {
         isSummarizing = true
         summaryResult = nil
         error = nil
@@ -619,9 +627,33 @@ class TranscriptSheetViewModel: ObservableObject {
                 userContent: transcript
             )
             summaryResult = result
+            saveSummaryToFile(summary: result, template: selectedTemplate, folderURL: folderURL, savedFolderURL: savedFolderURL)
         } catch {
             self.error = error.localizedDescription
         }
         isSummarizing = false
+    }
+
+    private func saveSummaryToFile(summary: String, template: SummaryTemplate, folderURL: URL, savedFolderURL: URL?) {
+        let accessGranted = savedFolderURL?.startAccessingSecurityScopedResource() ?? false
+        defer { if accessGranted { savedFolderURL?.stopAccessingSecurityScopedResource() } }
+
+        let transcriptURL = folderURL.appendingPathComponent("transcript.md")
+        let summarySection = "## Summary (\(template.rawValue))\n\n\(summary)"
+
+        guard var content = try? String(contentsOf: transcriptURL, encoding: .utf8) else {
+            // No existing file — write just the summary
+            try? summarySection.write(to: transcriptURL, atomically: true, encoding: .utf8)
+            return
+        }
+
+        // Replace existing summary section if present, otherwise append
+        if let range = content.range(of: "\n\n---\n\n## Summary") {
+            // Remove everything from the summary separator onward
+            content = String(content[content.startIndex..<range.lowerBound])
+        }
+
+        content += "\n\n---\n\n\(summarySection)"
+        try? content.write(to: transcriptURL, atomically: true, encoding: .utf8)
     }
 }
