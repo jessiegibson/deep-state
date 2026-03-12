@@ -5,6 +5,7 @@ import WhisperKit
 import Combine
 import AVFoundation
 import Speech
+import UniformTypeIdentifiers
 
 // MARK: - Meeting Record Model
 struct MeetingRecord: Identifiable {
@@ -56,6 +57,12 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
     @Published var isSummarizing = false
     @Published var summaryResult: String? = nil
     @Published var summaryError: String? = nil
+
+    // Import & retranscribe
+    @Published var isImporting = false
+    @Published var importProgress = ""
+    @Published var isRetranscribing = false
+    @Published var retranscribeProgress = ""
 
     private var stream: SCStream?
     private var recordingOutput: SCRecordingOutput?
@@ -301,29 +308,71 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
         }
     }
 
-    // MARK: - Transcription
+    // MARK: - Transcription (WhisperKit primary, Apple Speech Neural Engine fallback)
     private func transcribeAudio(audioURL: URL) async -> String {
-        guard let whisper = whisper else {
-            print("❌ WhisperKit model not loaded")
-            return "Transcription unavailable - AI model not loaded"
+        // Try WhisperKit first
+        if let whisper = whisper {
+            do {
+                print("🎤 Transcribing audio file with WhisperKit...")
+                statusMessage = "Transcribing with AI..."
+                let results = try await whisper.transcribe(audioPath: audioURL.path)
+
+                if let first = results.first, !first.text.isEmpty {
+                    print("✅ WhisperKit transcription successful: \(first.text.count) characters")
+                    let formatted = TranscriptFormatter.format(segments: first.segments)
+                    return formatted.isEmpty ? first.text : formatted
+                } else {
+                    print("⚠️ WhisperKit: No speech detected, trying Apple Speech fallback...")
+                }
+            } catch {
+                print("❌ WhisperKit error: \(error.localizedDescription), trying Apple Speech fallback...")
+            }
+        } else {
+            print("⚠️ WhisperKit not loaded, using Apple Speech fallback...")
         }
 
-        do {
-            print("🎤 Transcribing audio file...")
-            let results = try await whisper.transcribe(audioPath: audioURL.path)
+        // Fallback: Apple Speech with on-device Neural Engine
+        statusMessage = "Transcribing with Apple Speech (fallback)..."
+        if let appleSpeechResult = await transcribeWithAppleSpeech(audioURL: audioURL) {
+            return appleSpeechResult
+        }
 
-            if let first = results.first, !first.text.isEmpty {
-                print("✅ Transcription successful: \(first.text.count) characters")
-                // Format into paragraphs using silence gaps between segments
-                let formatted = TranscriptFormatter.format(segments: first.segments)
-                return formatted.isEmpty ? first.text : formatted
-            } else {
-                print("⚠️ No speech detected in audio")
-                return "No speech detected in recording"
+        return "Transcription failed - both WhisperKit and Apple Speech unavailable"
+    }
+
+    /// On-device Neural Engine transcription using Apple's SFSpeechURLRecognitionRequest
+    private func transcribeWithAppleSpeech(audioURL: URL) async -> String? {
+        guard let recognizer = speechRecognizer, recognizer.isAvailable else {
+            print("❌ Apple Speech recognizer not available")
+            return nil
+        }
+
+        let request = SFSpeechURLRecognitionRequest(url: audioURL)
+        request.requiresOnDeviceRecognition = true
+
+        return await withCheckedContinuation { continuation in
+            var hasResumed = false
+            recognizer.recognitionTask(with: request) { result, error in
+                guard !hasResumed else { return }
+
+                if let error = error {
+                    print("❌ Apple Speech error: \(error.localizedDescription)")
+                    hasResumed = true
+                    continuation.resume(returning: nil)
+                    return
+                }
+
+                guard let result = result else { return }
+
+                if result.isFinal {
+                    hasResumed = true
+                    let segments = result.bestTranscription.segments
+                    let formatted = TranscriptFormatter.format(sfSegments: segments)
+                    let text = formatted.isEmpty ? result.bestTranscription.formattedString : formatted
+                    print("✅ Apple Speech transcription successful: \(text.count) characters")
+                    continuation.resume(returning: text.isEmpty ? nil : text)
+                }
             }
-        } catch {
-            print("❌ Transcription error: \(error.localizedDescription)")
-            return "Transcription failed: \(error.localizedDescription)"
         }
     }
 
@@ -436,6 +485,211 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
         guard folderURL.startAccessingSecurityScopedResource() else { return }
         defer { folderURL.stopAccessingSecurityScopedResource() }
         NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
+    // MARK: - Import External Files
+
+    func importFiles() async {
+        guard savedFolderURL != nil else {
+            statusMessage = "Select a save folder first"
+            return
+        }
+
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        panel.allowedContentTypes = [.audio, .movie]
+        panel.message = "Select audio or video files to import and transcribe"
+
+        guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
+
+        let urls = panel.urls
+        isImporting = true
+        importProgress = ""
+
+        for (index, url) in urls.enumerated() {
+            await importSingleFile(fileURL: url, index: index, total: urls.count)
+        }
+
+        isImporting = false
+        importProgress = ""
+        loadLibrary()
+        statusMessage = "Imported \(urls.count) file\(urls.count == 1 ? "" : "s")"
+    }
+
+    private func importSingleFile(fileURL: URL, index: Int, total: Int) async {
+        let filename = fileURL.deletingPathExtension().lastPathComponent
+        let ext = fileURL.pathExtension.lowercased()
+        importProgress = "Processing \(filename) (\(index + 1)/\(total))..."
+
+        _ = fileURL.startAccessingSecurityScopedResource()
+        defer { fileURL.stopAccessingSecurityScopedResource() }
+
+        let fm = FileManager.default
+        let tempDir = fm.temporaryDirectory
+
+        do {
+            // Copy to temp to avoid sandbox issues
+            let tempCopy = tempDir.appendingPathComponent("import_\(UUID().uuidString).\(ext)")
+            try? fm.removeItem(at: tempCopy)
+            try fm.copyItem(at: fileURL, to: tempCopy)
+            defer { try? fm.removeItem(at: tempCopy) }
+
+            let videoExtensions = ["mov", "mp4", "m4v"]
+            let isVideo = videoExtensions.contains(ext)
+
+            var audioURL: URL
+            var videoURL: URL? = nil
+
+            if isVideo {
+                importProgress = "Extracting audio from \(filename) (\(index + 1)/\(total))..."
+                guard let extracted = try await extractAudio(from: tempCopy) else {
+                    print("❌ Failed to extract audio from \(filename)")
+                    return
+                }
+                audioURL = extracted
+                videoURL = tempCopy
+            } else if ext == "m4a" {
+                audioURL = tempCopy
+            } else {
+                importProgress = "Converting \(filename) (\(index + 1)/\(total))..."
+                audioURL = try await convertToM4A(from: tempCopy)
+            }
+            defer {
+                if audioURL != tempCopy { try? fm.removeItem(at: audioURL) }
+            }
+
+            importProgress = "Transcribing \(filename) (\(index + 1)/\(total))..."
+            let transcript = await transcribeAudio(audioURL: audioURL)
+
+            // Get file creation date for the folder timestamp
+            let resourceValues = try? fileURL.resourceValues(forKeys: [.creationDateKey])
+            let fileDate = resourceValues?.creationDate ?? Date()
+
+            importProgress = "Saving \(filename) (\(index + 1)/\(total))..."
+            saveImportedFile(transcript: transcript, title: filename, audioURL: audioURL, videoURL: videoURL, date: fileDate)
+
+        } catch {
+            print("❌ Import error for \(filename): \(error.localizedDescription)")
+        }
+    }
+
+    private func saveImportedFile(transcript: String, title: String, audioURL: URL, videoURL: URL? = nil, date: Date) {
+        guard let folderURL = savedFolderURL else { return }
+        guard folderURL.startAccessingSecurityScopedResource() else { return }
+        defer { folderURL.stopAccessingSecurityScopedResource() }
+
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd HH-mm-ss"
+        let timestamp = dateFormatter.string(from: date)
+
+        let meetingFolderURL = folderURL.appendingPathComponent(timestamp)
+
+        do {
+            try FileManager.default.createDirectory(at: meetingFolderURL, withIntermediateDirectories: true)
+
+            // Build transcript.md
+            let displayDateFormatter = DateFormatter()
+            displayDateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+            let displayTimestamp = displayDateFormatter.string(from: date)
+
+            let content = "# \(title)\n\(displayTimestamp)\n\n---\n\n## Transcript\n\n\(transcript)"
+            let transcriptFileURL = meetingFolderURL.appendingPathComponent("transcript.md")
+            try content.write(to: transcriptFileURL, atomically: true, encoding: .utf8)
+
+            // Copy audio
+            let audioDestURL = meetingFolderURL.appendingPathComponent("audio.m4a")
+            if FileManager.default.fileExists(atPath: audioURL.path) {
+                try FileManager.default.copyItem(at: audioURL, to: audioDestURL)
+            }
+
+            // Copy video if present
+            if let videoURL = videoURL, FileManager.default.fileExists(atPath: videoURL.path) {
+                let videoDestURL = meetingFolderURL.appendingPathComponent("video.mov")
+                try FileManager.default.copyItem(at: videoURL, to: videoDestURL)
+            }
+
+            print("✅ Imported \(title) to \(timestamp)")
+        } catch {
+            print("❌ Save import error: \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - Retranscribe Existing Recordings
+
+    func retranscribe(record: MeetingRecord) async {
+        guard record.hasAudio else {
+            statusMessage = "No audio file to retranscribe"
+            return
+        }
+
+        isRetranscribing = true
+        retranscribeProgress = "Retranscribing \(record.displayTitle)..."
+
+        guard let folderURL = savedFolderURL else {
+            isRetranscribing = false
+            return
+        }
+        guard folderURL.startAccessingSecurityScopedResource() else {
+            isRetranscribing = false
+            return
+        }
+        defer { folderURL.stopAccessingSecurityScopedResource() }
+
+        let audioURL = record.folderURL.appendingPathComponent("audio.m4a")
+        guard FileManager.default.fileExists(atPath: audioURL.path) else {
+            statusMessage = "Audio file not found"
+            isRetranscribing = false
+            return
+        }
+
+        let newTranscript = await transcribeAudio(audioURL: audioURL)
+
+        // Update transcript.md preserving title and notes
+        let transcriptURL = record.folderURL.appendingPathComponent("transcript.md")
+        if let existingContent = try? String(contentsOf: transcriptURL, encoding: .utf8) {
+            let updated = replaceTranscriptSection(in: existingContent, with: newTranscript)
+            try? updated.write(to: transcriptURL, atomically: true, encoding: .utf8)
+        } else {
+            try? ("## Transcript\n\n\(newTranscript)").write(to: transcriptURL, atomically: true, encoding: .utf8)
+        }
+
+        isRetranscribing = false
+        retranscribeProgress = ""
+        loadLibrary()
+        statusMessage = "Retranscription complete"
+    }
+
+    func retranscribeBatch(records: [MeetingRecord]) async {
+        isRetranscribing = true
+        for (i, record) in records.enumerated() {
+            retranscribeProgress = "Retranscribing \(i + 1) of \(records.count): \(record.displayTitle)..."
+            await retranscribe(record: record)
+        }
+        isRetranscribing = false
+        retranscribeProgress = ""
+        statusMessage = "Batch retranscription complete (\(records.count) files)"
+    }
+
+    private func replaceTranscriptSection(in existingContent: String, with newTranscript: String) -> String {
+        let separator = "\n\n---\n\n"
+        let sections = existingContent.components(separatedBy: separator)
+
+        // Find the section that starts with "## Transcript"
+        var headerSections: [String] = []
+        for section in sections {
+            if section.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("## Transcript") {
+                break
+            }
+            headerSections.append(section)
+        }
+
+        if headerSections.isEmpty {
+            return "## Transcript\n\n\(newTranscript)"
+        }
+
+        return headerSections.joined(separator: separator) + separator + "## Transcript\n\n\(newTranscript)"
     }
 
     // MARK: - Screen Recording Helper
@@ -806,7 +1060,12 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
         recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
                 guard let self = self else { return }
                 if let result = result {
+                    let isFinal = result.isFinal
+                    let hasMeta = result.speechRecognitionMetadata != nil
+                    let hasAnalytics = result.speechRecognitionMetadata?.voiceAnalytics != nil
+                    print("🎙️ Recognition result: isFinal=\(isFinal), hasMetadata=\(hasMeta), hasVoiceAnalytics=\(hasAnalytics), segments=\(result.bestTranscription.segments.count)")
                     self.analyticsCollector.ingest(result: result)
+                    print("🎙️ Analytics vectors after ingest: \(self.analyticsCollector.vectors.count)")
                     let segments = result.bestTranscription.segments
                     Task { @MainActor in
                         self.liveTranscript = result.bestTranscription.formattedString
@@ -865,14 +1124,27 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
     private func stopAudioOnly() async {
         statusMessage = "Stopping..."
 
-        // Stop engine and transcription
+        // Stop engine and audio tap
         audioOnlyEngine?.stop()
         audioOnlyEngine?.inputNode.removeTap(onBus: 0)
+        audioFile = nil // Close the file handle
+
+        // Signal end of audio and wait for the final recognition result.
+        // The final result carries speechRecognitionMetadata.voiceAnalytics,
+        // which is needed for speaker diarization. Cancelling immediately
+        // would abort before that final callback fires.
         recognitionRequest?.endAudio()
-        recognitionTask?.cancel()
+        if let task = recognitionTask {
+            statusMessage = "Finishing transcription..."
+            // Wait up to 2 seconds for the recognizer to deliver the final result
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            // If still running, force cancel
+            if task.state == .running {
+                task.cancel()
+            }
+        }
         recognitionRequest = nil
         recognitionTask = nil
-        audioFile = nil // Close the file handle
 
         isRecording = false
         isPaused = false
@@ -913,6 +1185,7 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
 
         // Run speaker diarization if we captured voice analytics
         let vectors = analyticsCollector.vectors
+        print("🔊 Diarization check: \(vectors.count) voice vectors, \(rawTranscriptionSegments.count) transcription segments")
         if !vectors.isEmpty && !rawTranscriptionSegments.isEmpty {
             statusMessage = "Identifying speakers..."
             let segments = SpeakerSegmentBuilder.build(
