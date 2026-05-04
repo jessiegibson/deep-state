@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 
 ## Overview of Application
-This application is a MacOS desktop application that allows the user to create audio, video, screen recordings while the user is in a meeting, on a video call, walking through documents. This application will save the audio recording, transcribe the audio, and if selected record the screen of the user.
+This application is a MacOS desktop application and iOS mobile application that allows the user to create audio, video, screen recordings while the user is in a meeting, on a video call, walking through documents. This application will save the audio recording, transcribe the audio, and if selected record the screen of the user.
 
 The application allows the user to select where they want to save the files. When the application is first installed the application will step through a few screens to ensure that the user provides all of the permissions to their desktop.
 
@@ -35,11 +35,21 @@ There are no tests in this project currently.
 - **MeetingManager.swift** — Core class handling screen recording, audio capture, live transcription, offline AI transcription, file management, and speaker diarization
 - **ContentView.swift** — Main UI with tab-style navigation between recorder and library views. Window is freely resizable with a 640×480 minimum size.
 - **MeetingManagerApp.swift** — App entry point, WindowGroup setup with `.windowResizability(.contentMinSize)`
+- **StorageManager.swift** — Shared singleton for iCloud + local file storage. Both macOS and iOS targets use this. Handles security-scoped bookmarks (macOS local mode) and iCloud Documents container.
+- **StorageSettingsView.swift** — Shared settings UI for choosing iCloud vs local storage mode and subfolder name
 - **NeobrutalDesign.swift** — All design tokens (`NBDesign`), `NBButtonStyle`, `NBCardModifier`
 - **VoiceVisualizer.swift** — Animated audio level bars (5 bars, color-coded by volume)
 - **SpeakerDiarization.swift** — Speaker diarization engine: voice analytics collection, k-means clustering, voice print persistence
 - **SpeakerLabelingView.swift** — Post-recording sheet for naming detected speakers
 - **cameraPreview.swift** — NSViewRepresentable camera preview (currently unused)
+
+**iOS target** (`deep-state/`):
+- **deep_stateApp.swift** — iOS app entry point
+- **iOS/IOSMeetingManager.swift** — iOS recording manager (audio-only + WhisperKit)
+- **iOS/IOSContentView.swift**, **IOSRecordingView.swift**, **IOSLibraryView.swift** — iOS-specific views
+- **Shared/** — Symlinks to shared files in `MeetingAgent/` (StorageManager, NeobrutalDesign, LLM*, etc.)
+
+**iCloud sync**: Both targets use the same iCloud container (`iCloud.soloai.MeetingAgent`). Recordings saved on one device automatically sync to the other via iCloud Documents. The user can configure the subfolder name in Storage Settings.
 
 **Recording flow**:
 1. `start()` → requests ScreenCaptureKit permission → captures display video + system audio to temp MOV file
@@ -50,6 +60,7 @@ There are no tests in this project currently.
 ```
 2026-03-08 14-30-00/
   transcript.md   ← title, date, notes, diarized transcript
+  Summarization_transcript.md   <- title, date, pepole, summarization of the transcript.
   audio.m4a
   video.mov       ← screen recording mode only
 ```

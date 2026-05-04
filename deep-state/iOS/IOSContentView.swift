@@ -1,4 +1,3 @@
-#if os(iOS)
 import SwiftUI
 
 enum IOSAppTab { case record, library }
@@ -68,4 +67,3 @@ struct IOSContentView: View {
         .buttonStyle(.plain)
     }
 }
-#endif

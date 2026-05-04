@@ -1,4 +1,3 @@
-#if os(iOS)
 import SwiftUI
 
 struct IOSLibraryView: View {
@@ -101,7 +100,7 @@ struct IOSTranscriptView: View {
 
                         Button(vm.isSummarizing ? "SUMMARIZING..." : "RUN SUMMARY") {
                             guard let t = record.transcriptContent else { return }
-                            Task { await vm.summarize(transcript: t) }
+                            Task { await vm.summarize(transcript: t, folderURL: record.folderURL) }
                         }
                         .buttonStyle(NBButtonStyle(color: NBDesign.foreground, textColor: NBDesign.background))
                         .disabled(vm.isSummarizing || record.transcriptContent == nil)
@@ -130,4 +129,3 @@ struct IOSTranscriptView: View {
         }
     }
 }
-#endif

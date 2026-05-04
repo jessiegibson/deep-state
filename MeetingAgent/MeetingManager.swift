@@ -1,4 +1,4 @@
-
+#if os(macOS)
 import SwiftUI
 import ScreenCaptureKit
 import WhisperKit
@@ -7,25 +7,6 @@ import AVFoundation
 import Speech
 import UniformTypeIdentifiers
 
-// MARK: - Meeting Record Model
-struct MeetingRecord: Identifiable {
-    let id = UUID()
-    let folderURL: URL
-    let folderName: String
-    let title: String?
-    let date: Date
-    let hasAudio: Bool
-    let hasVideo: Bool
-    let transcriptContent: String?
-
-    var displayTitle: String { title ?? folderName }
-
-    var formattedDate: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM d, yyyy  h:mm a"
-        return formatter.string(from: date)
-    }
-}
 
 enum RecordingMode: String, CaseIterable {
     case screenAndAudio = "Screen + Audio"
@@ -40,9 +21,12 @@ enum PermissionStatus {
 class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
     @Published var isRecording = false
     @Published var statusMessage = "Ready"
-    @Published var savedFolderURL: URL?
     @Published var liveTranscript = ""
     @Published var recordingMode: RecordingMode = .audioOnly
+
+    let storage = StorageManager.shared
+    /// Convenience accessor — views that read savedFolderURL continue to work.
+    var savedFolderURL: URL? { storage.rootURL }
 
     // Preferences
     @Published var shouldRecordCamera: Bool = UserDefaults.standard.bool(forKey: "pref_record_camera") {
@@ -74,6 +58,15 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
     private var audioEngine: AVAudioEngine?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
+    // Accumulator for finalized recognition chunks. SFSpeechRecognizer emits multiple
+    // `isFinal` results per session (and on-device tasks cap around ~1 min), so we must
+    // append finalized text here and display `finalizedTranscript + currentPartial` —
+    // otherwise each new chunk's `formattedString` overwrites prior speech.
+    // FUTURE: consider WhisperKit streaming (option B) for higher live accuracy —
+    // would run WhisperKit on rolling audio windows in parallel with SFSpeech (kept for
+    // SFVoiceAnalytics-based speaker diarization). Gated on thermal state + hardware.
+    private var finalizedTranscript = ""
+    private var collectAnalyticsInLiveTask = false
 
     // Audio-only recording
     private var audioFile: AVAudioFile?
@@ -125,8 +118,8 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
         super.init()
         
         print("MeetingManager init started")
-        
-        loadSavedFolder()
+
+        // StorageManager.shared handles folder resolution (iCloud or local bookmark)
         print("Folder loaded")
         
         // 1. Check permissions immediately on startup
@@ -289,6 +282,12 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
             do {
                 try audioOnlyEngine?.start()
                 isPaused = false
+                // If the recognition task ended while paused (e.g., hit the ~1 min cap),
+                // spin up a new one so live transcription resumes. The audio tap feeds
+                // `self.recognitionRequest`, which the helper replaces.
+                if recognitionTask == nil {
+                    startRotatingRecognitionTask(collectAnalytics: true)
+                }
                 statusMessage = "Recording (Audio Only)..."
             } catch {
                 statusMessage = "Resume failed: \(error.localizedDescription)"
@@ -423,68 +422,16 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
 
     // MARK: - Library
     func loadLibrary() {
-        guard let folderURL = savedFolderURL else { meetingLibrary = []; return }
-        guard folderURL.startAccessingSecurityScopedResource() else { return }
-        defer { folderURL.stopAccessingSecurityScopedResource() }
-
-        let fm = FileManager.default
-        guard let contents = try? fm.contentsOfDirectory(
-            at: folderURL,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: .skipsHiddenFiles
-        ) else { return }
-
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd HH-mm-ss"
-
-        meetingLibrary = contents
-            .filter { url in
-                var isDir = ObjCBool(false)
-                fm.fileExists(atPath: url.path, isDirectory: &isDir)
-                return isDir.boolValue && dateFormatter.date(from: url.lastPathComponent) != nil
-            }
-            .compactMap { parseMeetingRecord(from: $0) }
-            .sorted { $0.date > $1.date }
-    }
-
-    private func parseMeetingRecord(from folderURL: URL) -> MeetingRecord? {
-        let folderName = folderURL.lastPathComponent
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd HH-mm-ss"
-        guard let date = dateFormatter.date(from: folderName) else { return nil }
-
-        let fm = FileManager.default
-        let hasAudio = fm.fileExists(atPath: folderURL.appendingPathComponent("audio.m4a").path)
-        let hasVideo = fm.fileExists(atPath: folderURL.appendingPathComponent("video.mov").path)
-
-        let transcriptURL = folderURL.appendingPathComponent("transcript.md")
-        var title: String? = nil
-        var transcriptContent: String? = nil
-
-        if let content = try? String(contentsOf: transcriptURL, encoding: .utf8) {
-            transcriptContent = content
-            if let firstLine = content.components(separatedBy: "\n").first,
-               firstLine.hasPrefix("# ") {
-                title = String(firstLine.dropFirst(2))
-            }
+        let result = storage.withScopedAccess {
+            self.storage.loadMeetingLibrary()
         }
-
-        return MeetingRecord(
-            folderURL: folderURL,
-            folderName: folderName,
-            title: title,
-            date: date,
-            hasAudio: hasAudio,
-            hasVideo: hasVideo,
-            transcriptContent: transcriptContent
-        )
+        meetingLibrary = result ?? []
     }
 
     func openInFinder(_ url: URL) {
-        guard let folderURL = savedFolderURL else { return }
-        guard folderURL.startAccessingSecurityScopedResource() else { return }
-        defer { folderURL.stopAccessingSecurityScopedResource() }
-        NSWorkspace.shared.activateFileViewerSelecting([url])
+        _ = storage.withScopedAccess {
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        }
     }
 
     // MARK: - Import External Files
@@ -576,43 +523,14 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
     }
 
     private func saveImportedFile(transcript: String, title: String, audioURL: URL, videoURL: URL? = nil, date: Date) {
-        guard let folderURL = savedFolderURL else { return }
-        guard folderURL.startAccessingSecurityScopedResource() else { return }
-        defer { folderURL.stopAccessingSecurityScopedResource() }
-
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd HH-mm-ss"
-        let timestamp = dateFormatter.string(from: date)
-
-        let meetingFolderURL = folderURL.appendingPathComponent(timestamp)
-
-        do {
-            try FileManager.default.createDirectory(at: meetingFolderURL, withIntermediateDirectories: true)
-
-            // Build transcript.md
-            let displayDateFormatter = DateFormatter()
-            displayDateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-            let displayTimestamp = displayDateFormatter.string(from: date)
-
-            let content = "# \(title)\n\(displayTimestamp)\n\n---\n\n## Transcript\n\n\(transcript)"
-            let transcriptFileURL = meetingFolderURL.appendingPathComponent("transcript.md")
-            try content.write(to: transcriptFileURL, atomically: true, encoding: .utf8)
-
-            // Copy audio
-            let audioDestURL = meetingFolderURL.appendingPathComponent("audio.m4a")
-            if FileManager.default.fileExists(atPath: audioURL.path) {
-                try FileManager.default.copyItem(at: audioURL, to: audioDestURL)
-            }
-
-            // Copy video if present
-            if let videoURL = videoURL, FileManager.default.fileExists(atPath: videoURL.path) {
-                let videoDestURL = meetingFolderURL.appendingPathComponent("video.mov")
-                try FileManager.default.copyItem(at: videoURL, to: videoDestURL)
-            }
-
-            print("✅ Imported \(title) to \(timestamp)")
-        } catch {
-            print("❌ Save import error: \(error.localizedDescription)")
+        _ = try? storage.withScopedAccess {
+            try self.storage.saveMeeting(
+                transcript: transcript,
+                title: title,
+                notes: "",
+                audioURL: audioURL,
+                videoURL: videoURL
+            )
         }
     }
 
@@ -627,18 +545,17 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
         isRetranscribing = true
         retranscribeProgress = "Retranscribing \(record.displayTitle)..."
 
-        guard let folderURL = savedFolderURL else {
+        guard savedFolderURL != nil else {
             isRetranscribing = false
             return
         }
-        guard folderURL.startAccessingSecurityScopedResource() else {
-            isRetranscribing = false
-            return
-        }
-        defer { folderURL.stopAccessingSecurityScopedResource() }
 
         let audioURL = record.folderURL.appendingPathComponent("audio.m4a")
-        guard FileManager.default.fileExists(atPath: audioURL.path) else {
+
+        let exists = storage.withScopedAccess {
+            FileManager.default.fileExists(atPath: audioURL.path)
+        }
+        guard exists == true else {
             statusMessage = "Audio file not found"
             isRetranscribing = false
             return
@@ -647,12 +564,14 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
         let newTranscript = await transcribeAudio(audioURL: audioURL)
 
         // Update transcript.md preserving title and notes
-        let transcriptURL = record.folderURL.appendingPathComponent("transcript.md")
-        if let existingContent = try? String(contentsOf: transcriptURL, encoding: .utf8) {
-            let updated = replaceTranscriptSection(in: existingContent, with: newTranscript)
-            try? updated.write(to: transcriptURL, atomically: true, encoding: .utf8)
-        } else {
-            try? ("## Transcript\n\n\(newTranscript)").write(to: transcriptURL, atomically: true, encoding: .utf8)
+        _ = storage.withScopedAccess {
+            let transcriptURL = record.folderURL.appendingPathComponent("transcript.md")
+            if let existingContent = try? String(contentsOf: transcriptURL, encoding: .utf8) {
+                let updated = self.replaceTranscriptSection(in: existingContent, with: newTranscript)
+                try? updated.write(to: transcriptURL, atomically: true, encoding: .utf8)
+            } else {
+                try? ("## Transcript\n\n\(newTranscript)").write(to: transcriptURL, atomically: true, encoding: .utf8)
+            }
         }
 
         isRetranscribing = false
@@ -787,129 +706,98 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
         return outputURL
     }
 
-    // MARK: - Bookmark Logic
+    // MARK: - Folder Selection (delegates to StorageManager)
+
     func selectFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = false
-        
-        if panel.runModal() == .OK {
-            guard let url = panel.url else { return }
-            saveFolderBookmark(url: url)
-        }
-    }
-
-    private func saveFolderBookmark(url: URL) {
-        do {
-            let bookmarkData = try url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
-            UserDefaults.standard.set(bookmarkData, forKey: "folder_bookmark")
-            self.savedFolderURL = url
-        } catch {
-            print("Failed to save bookmark: \(error)")
-        }
-    }
-
-    private func loadSavedFolder() {
-        guard let bookmarkData = UserDefaults.standard.data(forKey: "folder_bookmark") else { return }
-        var isStale = false
-        do {
-            let url = try URL(resolvingBookmarkData: bookmarkData, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &isStale)
-            if isStale { saveFolderBookmark(url: url) }
-            self.savedFolderURL = url
-        } catch {
-            print("Failed to load bookmark: \(error)")
-        }
+        storage.selectLocalFolder()
     }
 
 
     // MARK: - Save Logic
     func saveTranscript(text: String, videoURL: URL? = nil, audioURL: URL? = nil) {
-        guard let folderURL = savedFolderURL else {
+        let result = try? storage.withScopedAccess {
+            try self.storage.saveMeeting(
+                transcript: text,
+                title: self.meetingTitle,
+                notes: self.meetingNotes,
+                audioURL: audioURL,
+                videoURL: videoURL
+            )
+        }
+
+        if let folder = result {
+            statusMessage = "Saved to \(folder.lastPathComponent)"
+        } else if storage.rootURL == nil {
             statusMessage = "No save location selected"
-            return
-        }
-        
-        // CRITICAL: Check the boolean return value
-        guard folderURL.startAccessingSecurityScopedResource() else {
+        } else {
             statusMessage = "Permission denied to access folder."
-            return
-        }
-        
-        // Defer ensures we stop accessing even if we throw or return early
-        defer {
-            folderURL.stopAccessingSecurityScopedResource()
-        }
-        
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd HH-mm-ss"
-        let timestamp = dateFormatter.string(from: Date())
-        let meetingFolderName = timestamp
-        
-        // Create the meeting folder
-        let meetingFolderURL = folderURL.appendingPathComponent(meetingFolderName)
-        
-        do {
-            try FileManager.default.createDirectory(at: meetingFolderURL, withIntermediateDirectories: true)
-            
-            var savedFiles: [String] = []
-            
-            // Save the transcript, prepending any meeting notes
-            let transcriptFilename = "transcript.md"
-            let transcriptFileURL = meetingFolderURL.appendingPathComponent(transcriptFilename)
-            let titleTrimmed = meetingTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-            let trimmedNotes = meetingNotes.trimmingCharacters(in: .whitespacesAndNewlines)
-            let displayDateFormatter = DateFormatter()
-            displayDateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-            let displayTimestamp = displayDateFormatter.string(from: Date())
-            var sections: [String] = []
-            if !titleTrimmed.isEmpty {
-                sections.append("# \(titleTrimmed)\n\(displayTimestamp)")
-            } else {
-                sections.append(displayTimestamp)
-            }
-            if !trimmedNotes.isEmpty { sections.append("## Meeting Notes\n\n\(trimmedNotes)") }
-            let finalText = sections.joined(separator: "\n\n---\n\n") + "\n\n---\n\n## Transcript\n\n\(text)"
-            try finalText.write(to: transcriptFileURL, atomically: true, encoding: .utf8)
-            savedFiles.append(transcriptFilename)
-            
-            // Save the video file if provided
-            if let videoURL = videoURL {
-                // Verify the file exists before trying to copy
-                guard FileManager.default.fileExists(atPath: videoURL.path) else {
-                    throw NSError(domain: "MeetingManager", code: -1, 
-                                  userInfo: [NSLocalizedDescriptionKey: "Video file not found at \(videoURL.path)"])
-                }
-                
-                let videoFilename = "video.mov"
-                let videoFileURL = meetingFolderURL.appendingPathComponent(videoFilename)
-                try FileManager.default.copyItem(at: videoURL, to: videoFileURL)
-                savedFiles.append(videoFilename)
-            }
-            
-            // Save the audio file if provided
-            if let audioURL = audioURL {
-                // Verify the file exists before trying to copy
-                guard FileManager.default.fileExists(atPath: audioURL.path) else {
-                    throw NSError(domain: "MeetingManager", code: -1, 
-                                  userInfo: [NSLocalizedDescriptionKey: "Audio file not found at \(audioURL.path)"])
-                }
-                
-                let audioFilename = "audio.m4a"
-                let audioFileURL = meetingFolderURL.appendingPathComponent(audioFilename)
-                try FileManager.default.copyItem(at: audioURL, to: audioFileURL)
-                savedFiles.append(audioFilename)
-            }
-            
-            statusMessage = "Saved to \(meetingFolderName): \(savedFiles.joined(separator: ", "))"
-            
-        } catch {
-            statusMessage = "Save failed: \(error.localizedDescription)"
-            print("Save error details: \(error)")
         }
     }
     
     // MARK: - Live Speech-to-Text
+
+    /// Creates a fresh SFSpeechAudioBufferRecognitionRequest + task and wires the callback.
+    /// Accumulates finalized chunks into `finalizedTranscript` and rotates the task when
+    /// a result becomes final or the task ends — this is required because on-device tasks
+    /// cap around ~1 minute and each `isFinal` result resets `formattedString` on the
+    /// next partial. The audio tap feeds `self.recognitionRequest`, which this method
+    /// updates, so rotation is transparent to the tap.
+    private func startRotatingRecognitionTask(collectAnalytics: Bool) {
+        guard let recognizer = speechRecognizer, recognizer.isAvailable else {
+            print("❌ Speech recognizer not available for rotation")
+            return
+        }
+
+        let request = SFSpeechAudioBufferRecognitionRequest()
+        request.shouldReportPartialResults = true
+        request.requiresOnDeviceRecognition = true
+        self.recognitionRequest = request
+        self.collectAnalyticsInLiveTask = collectAnalytics
+
+        recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
+            guard let self = self else { return }
+
+            if let result = result {
+                if collectAnalytics {
+                    self.analyticsCollector.ingest(result: result)
+                }
+                let current = result.bestTranscription.formattedString
+                let segments = result.bestTranscription.segments
+                let isFinal = result.isFinal
+                Task { @MainActor in
+                    if collectAnalytics {
+                        self.rawTranscriptionSegments = segments
+                    }
+                    let joiner = self.finalizedTranscript.isEmpty ? "" : " "
+                    if isFinal {
+                        self.finalizedTranscript += joiner + current
+                        self.liveTranscript = self.finalizedTranscript
+                    } else {
+                        self.liveTranscript = self.finalizedTranscript + joiner + current
+                    }
+                }
+            }
+
+            if let error = error {
+                let nsError = error as NSError
+                print("⚠️ Recognition error: \(error.localizedDescription) code=\(nsError.code)")
+            }
+
+            // Rotate: if the task ended (final or error), spin up a new one so we keep
+            // transcribing beyond the per-task time cap. Only rotate if we're still
+            // recording — otherwise stop cleanly.
+            let ended = (result?.isFinal ?? false) || error != nil
+            if ended {
+                Task { @MainActor in
+                    guard self.isRecording, !self.isPaused else { return }
+                    // Avoid rotating if a newer request has already replaced this one.
+                    guard self.recognitionRequest === request else { return }
+                    self.startRotatingRecognitionTask(collectAnalytics: self.collectAnalyticsInLiveTask)
+                }
+            }
+        }
+    }
+
     private func startLiveTranscription() throws {
         print("🎤 Starting live transcription...")
         
@@ -931,53 +819,18 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
                          userInfo: [NSLocalizedDescriptionKey: "Failed to create audio engine"])
         }
         
-        // Cancel any previous task
+        // Cancel any previous task and reset the live accumulator for a fresh session.
         recognitionTask?.cancel()
         recognitionTask = nil
-        
-        // Create and configure the speech recognition request
-        recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
-        guard let recognitionRequest = recognitionRequest else {
-            print("❌ Failed to create recognition request")
-            throw NSError(domain: "MeetingManager", code: -1,
-                         userInfo: [NSLocalizedDescriptionKey: "Unable to create recognition request"])
-        }
-        
-        recognitionRequest.shouldReportPartialResults = true
-        recognitionRequest.requiresOnDeviceRecognition = true // ✅ Offline mode
-        
-        print("✅ Recognition request created")
-        
+        finalizedTranscript = ""
+
         let inputNode = audioEngine.inputNode
         print("✅ Got input node: \(inputNode)")
-        
-        // Start the recognition task
-        recognitionTask = recognizer.recognitionTask(with: recognitionRequest) { [weak self] (result: SFSpeechRecognitionResult?, error: Error?) in
-            guard let self = self else { return }
-            
-            if let result = result {
-                Task { @MainActor in
-                    self.liveTranscript = result.bestTranscription.formattedString
-                    print("📝 Transcript updated (\(result.bestTranscription.formattedString.count) chars): \(self.liveTranscript.prefix(50))...")
-                }
-            }
-            
-            if let error = error {
-                print("⚠️ Recognition error: \(error.localizedDescription)")
-                let nsError = error as NSError
-                print("   Error code: \(nsError.code), domain: \(nsError.domain)")
-                
-                Task { @MainActor in
-                    // Don't stop on certain errors, just log them
-                    if nsError.code != 216 { // 216 = retry error
-                        self.statusMessage = "Transcription issue: \(error.localizedDescription)"
-                    }
-                }
-            }
-        }
-        
+
+        // Start (and auto-rotate) the recognition task.
+        startRotatingRecognitionTask(collectAnalytics: false)
         print("✅ Recognition task started")
-        
+
         // Configure the microphone input
         let recordingFormat = inputNode.outputFormat(forBus: 0)
         print("✅ Recording format: \(recordingFormat.sampleRate)Hz, \(recordingFormat.channelCount) channels")
@@ -1048,34 +901,14 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
 
             recognitionTask?.cancel()
             recognitionTask = nil
-
-            let request = SFSpeechAudioBufferRecognitionRequest()
-            request.shouldReportPartialResults = true
-            request.requiresOnDeviceRecognition = true
-            self.recognitionRequest = request
+            finalizedTranscript = ""
 
             analyticsCollector.reset()
             rawTranscriptionSegments = []
 
-        recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
-                guard let self = self else { return }
-                if let result = result {
-                    let isFinal = result.isFinal
-                    let hasMeta = result.speechRecognitionMetadata != nil
-                    let hasAnalytics = result.speechRecognitionMetadata?.voiceAnalytics != nil
-                    print("🎙️ Recognition result: isFinal=\(isFinal), hasMetadata=\(hasMeta), hasVoiceAnalytics=\(hasAnalytics), segments=\(result.bestTranscription.segments.count)")
-                    self.analyticsCollector.ingest(result: result)
-                    print("🎙️ Analytics vectors after ingest: \(self.analyticsCollector.vectors.count)")
-                    let segments = result.bestTranscription.segments
-                    Task { @MainActor in
-                        self.liveTranscript = result.bestTranscription.formattedString
-                        self.rawTranscriptionSegments = segments
-                    }
-                }
-                if let error = error {
-                    print("Recognition error: \(error.localizedDescription)")
-                }
-            }
+            // Start (and auto-rotate) the recognition task with analytics collection
+            // enabled for speaker diarization.
+            startRotatingRecognitionTask(collectAnalytics: true)
 
             // Single tap: write to file + feed recognizer + compute amplitude
             inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
@@ -1395,7 +1228,7 @@ extension MeetingManager {
 
 #Preview {
     @Previewable @State var manager = MeetingManager()
-    
+
     Button("Stop & Transcribe") {
         Task {
             await manager.stopAndTranscribe()
@@ -1403,4 +1236,5 @@ extension MeetingManager {
     }
     .padding()
 }
+#endif
 
