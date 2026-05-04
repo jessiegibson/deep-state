@@ -1,4 +1,3 @@
-#if os(iOS)
 import SwiftUI
 
 struct IOSLibraryView: View {
@@ -130,4 +129,3 @@ struct IOSTranscriptView: View {
         }
     }
 }
-#endif

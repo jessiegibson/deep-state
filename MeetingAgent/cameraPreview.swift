@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 import AVFoundation
 
@@ -25,4 +26,5 @@ struct CameraPreview: NSViewRepresentable {
     func updateNSView(_ nsView: NSView, context: Context) {
         nsView.layer?.frame = nsView.bounds
     }
-}   
+}
+#endif

@@ -36,10 +36,15 @@ class TranscriptSheetViewModel: ObservableObject {
     private func saveSummaryToFile(summary: String, template: SummaryTemplate,
                                    folderURL: URL, savedFolderURL: URL?) {
         #if os(macOS)
-        let accessGranted = savedFolderURL?.startAccessingSecurityScopedResource() ?? false
-        defer { if accessGranted { savedFolderURL?.stopAccessingSecurityScopedResource() } }
+        _ = StorageManager.shared.withScopedAccess {
+            self._writeSummary(summary: summary, template: template, folderURL: folderURL)
+        }
+        #else
+        _writeSummary(summary: summary, template: template, folderURL: folderURL)
         #endif
+    }
 
+    private func _writeSummary(summary: String, template: SummaryTemplate, folderURL: URL) {
         let transcriptURL = folderURL.appendingPathComponent("transcript.md")
         let summarySection = "## Summary (\(template.rawValue))\n\n\(summary)"
 

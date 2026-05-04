@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 
 struct OnboardingView: View {
@@ -62,8 +63,8 @@ struct OnboardingView: View {
                         hasCompletedOnboarding = true
                     }
                     .buttonStyle(NBButtonStyle(color: NBDesign.accent, textColor: .white))
-                    .disabled(manager.savedFolderURL == nil)
-                    .opacity(manager.savedFolderURL == nil ? 0.5 : 1.0)
+                    .disabled(StorageManager.shared.rootURL == nil)
+                    .opacity(StorageManager.shared.rootURL == nil ? 0.5 : 1.0)
                 }
             }
             .padding(NBDesign.padding)
@@ -141,7 +142,7 @@ struct OnboardingView: View {
 
     private var folderSelectionStep: some View {
         VStack(spacing: 16) {
-            Image(systemName: "folder.fill")
+            Image(systemName: "icloud.fill")
                 .font(.system(size: 48))
 
             Text("SAVE LOCATION")
@@ -152,17 +153,44 @@ struct OnboardingView: View {
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
 
-            if let folder = manager.savedFolderURL {
-                Text(folder.lastPathComponent)
-                    .font(NBDesign.bodyFont)
+            // iCloud option
+            Button {
+                StorageManager.shared.storageMode = .iCloud
+            } label: {
+                HStack {
+                    Image(systemName: "icloud.fill")
+                    Text("SAVE TO iCLOUD")
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(NBButtonStyle(
+                color: StorageManager.shared.storageMode == .iCloud ? NBDesign.foreground : NBDesign.surface,
+                textColor: StorageManager.shared.storageMode == .iCloud ? NBDesign.background : NBDesign.border
+            ))
+
+            // Local folder option
+            Button {
+                StorageManager.shared.storageMode = .local
+                manager.selectFolder()
+            } label: {
+                HStack {
+                    Image(systemName: "folder.fill")
+                    Text("CHOOSE LOCAL FOLDER")
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(NBButtonStyle(
+                color: StorageManager.shared.storageMode == .local ? NBDesign.foreground : NBDesign.surface,
+                textColor: StorageManager.shared.storageMode == .local ? NBDesign.background : NBDesign.border
+            ))
+
+            if let root = StorageManager.shared.rootURL {
+                Text(root.lastPathComponent)
+                    .font(NBDesign.captionFont)
+                    .foregroundStyle(.secondary)
                     .padding(NBDesign.smallPadding)
                     .nbCard()
             }
-
-            Button("SELECT FOLDER") {
-                manager.selectFolder()
-            }
-            .buttonStyle(NBButtonStyle())
         }
     }
 
@@ -203,3 +231,4 @@ struct OnboardingView: View {
         }
     }
 }
+#endif

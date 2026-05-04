@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 import AVFoundation
 
@@ -252,3 +253,4 @@ struct SpeakerLabelingView: View {
         return colors[id % colors.count]
     }
 }
+#endif

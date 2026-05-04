@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 import Combine
 
@@ -72,6 +73,15 @@ struct ContentView: View {
 
 struct RecordingView: View {
     @ObservedObject var manager: MeetingManager
+    @State private var isStorageSettingsOpen = false
+
+    private var saveLocationLabel: String {
+        let storage = StorageManager.shared
+        if storage.storageMode == .iCloud {
+            return "iCloud / \(storage.iCloudSubfolder)"
+        }
+        return storage.localBookmarkURL?.lastPathComponent ?? "No Folder Selected"
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: NBDesign.padding) {
@@ -117,14 +127,14 @@ struct RecordingView: View {
                     .foregroundStyle(.secondary)
 
                 HStack {
-                    Image(systemName: "folder.fill")
+                    Image(systemName: manager.storage.storageMode == .iCloud ? "icloud.fill" : "folder.fill")
                         .font(.system(size: 16, weight: .bold))
-                    Text(manager.savedFolderURL?.lastPathComponent ?? "No Folder Selected")
+                    Text(saveLocationLabel)
                         .font(NBDesign.bodyFont)
                         .lineLimit(1)
                     Spacer()
                     Button("CHANGE") {
-                        manager.selectFolder()
+                        isStorageSettingsOpen = true
                     }
                     .font(NBDesign.captionFont)
                     .padding(.horizontal, 10)
@@ -136,6 +146,9 @@ struct RecordingView: View {
                 }
             }
             .nbCard()
+            .sheet(isPresented: $isStorageSettingsOpen) {
+                StorageSettingsView()
+            }
 
             // Divider
             Rectangle()
@@ -605,3 +618,4 @@ struct TranscriptSheetView: View {
         .background(NBDesign.background)
     }
 }
+#endif

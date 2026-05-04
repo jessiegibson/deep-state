@@ -1,9 +1,10 @@
-#if os(iOS)
 // iOS Meeting Manager
 // Audio-only recording + live transcription + WhisperKit offline transcription.
 // Saves recordings to iCloud Drive for cross-device access.
 
 import Foundation
+import Combine
+import SwiftUI
 import AVFoundation
 import Speech
 import WhisperKit
@@ -21,6 +22,8 @@ class IOSMeetingManager: ObservableObject {
     @Published var meetingTitle = ""
     @Published var meetingNotes = ""
     @Published var meetingLibrary: [MeetingRecord] = []
+
+    let storage = StorageManager.shared
 
     // MARK: - Private
 
@@ -217,89 +220,26 @@ class IOSMeetingManager: ObservableObject {
         }
     }
 
-    // MARK: - Save to iCloud Drive
+    // MARK: - Save to iCloud Drive (via StorageManager)
 
     private func saveRecording(transcript: String, audioURL: URL) {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH-mm-ss"
-        let timestamp = formatter.string(from: Date())
-
-        let saveURL = iCloudFolder()?.appendingPathComponent(timestamp)
-            ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-                .appendingPathComponent(timestamp)
-
         do {
-            try FileManager.default.createDirectory(at: saveURL, withIntermediateDirectories: true)
-
-            let titleTrimmed = meetingTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-            let notesTrimmed = meetingNotes.trimmingCharacters(in: .whitespacesAndNewlines)
-            let displayFormatter = DateFormatter()
-            displayFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-            let displayDate = displayFormatter.string(from: Date())
-
-            var sections: [String] = []
-            sections.append(titleTrimmed.isEmpty ? displayDate : "# \(titleTrimmed)\n\(displayDate)")
-            if !notesTrimmed.isEmpty { sections.append("## Meeting Notes\n\n\(notesTrimmed)") }
-            let finalText = sections.joined(separator: "\n\n---\n\n") + "\n\n---\n\n## Transcript\n\n\(transcript)"
-
-            try finalText.write(to: saveURL.appendingPathComponent("transcript.md"), atomically: true, encoding: .utf8)
-
-            if FileManager.default.fileExists(atPath: audioURL.path) {
-                try FileManager.default.copyItem(at: audioURL, to: saveURL.appendingPathComponent("audio.m4a"))
-            }
-
-            statusMessage = "Saved to \(timestamp)"
+            let folder = try storage.saveMeeting(
+                transcript: transcript,
+                title: meetingTitle,
+                notes: meetingNotes,
+                audioURL: audioURL
+            )
+            statusMessage = "Saved to \(folder.lastPathComponent)"
         } catch {
             statusMessage = "Save failed: \(error.localizedDescription)"
         }
     }
 
-    private func iCloudFolder() -> URL? {
-        FileManager.default.url(forUbiquityContainerIdentifier: nil)?
-            .appendingPathComponent("Documents")
-            .appendingPathComponent("MeetingAgent")
-    }
-
     // MARK: - Library
 
     func loadLibrary() {
-        let root = iCloudFolder()
-            ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-
-        guard let contents = try? FileManager.default.contentsOfDirectory(
-            at: root, includingPropertiesForKeys: [.isDirectoryKey], options: .skipsHiddenFiles
-        ) else { return }
-
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd HH-mm-ss"
-
-        meetingLibrary = contents
-            .filter { url in
-                var isDir = ObjCBool(false)
-                FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
-                return isDir.boolValue && dateFormatter.date(from: url.lastPathComponent) != nil
-            }
-            .compactMap { parseMeetingRecord(from: $0, dateFormatter: dateFormatter) }
-            .sorted { $0.date > $1.date }
-    }
-
-    private func parseMeetingRecord(from url: URL, dateFormatter: DateFormatter) -> MeetingRecord? {
-        guard let date = dateFormatter.date(from: url.lastPathComponent) else { return nil }
-        let fm = FileManager.default
-        let hasAudio = fm.fileExists(atPath: url.appendingPathComponent("audio.m4a").path)
-        let transcriptURL = url.appendingPathComponent("transcript.md")
-        var title: String? = nil
-        var content: String? = nil
-        if let text = try? String(contentsOf: transcriptURL, encoding: .utf8) {
-            content = text
-            if let first = text.components(separatedBy: "\n").first, first.hasPrefix("# ") {
-                title = String(first.dropFirst(2))
-            }
-        }
-        return MeetingRecord(
-            folderURL: url, folderName: url.lastPathComponent, title: title,
-            date: date, hasAudio: hasAudio, hasVideo: false, transcriptContent: content
-        )
+        meetingLibrary = storage.loadMeetingLibrary()
     }
 
     // MARK: - Audio Conversion
@@ -317,4 +257,3 @@ class IOSMeetingManager: ObservableObject {
         return output
     }
 }
-#endif
