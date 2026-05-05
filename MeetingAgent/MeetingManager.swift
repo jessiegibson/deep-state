@@ -18,7 +18,7 @@ enum PermissionStatus {
 }
 
 @MainActor
-class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
+class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate, SCStreamDelegate {
     @Published var isRecording = false
     @Published var statusMessage = "Ready"
     @Published var liveTranscript = ""
@@ -635,9 +635,6 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
         config.width = Int(display.width)
         config.height = Int(display.height)
         config.capturesAudio = shouldRecordSystemAudio
-        if #available(macOS 14.0, *) {
-            config.captureMicrophone = true
-        }
 
         if FileManager.default.fileExists(atPath: url.path) {
             try? FileManager.default.removeItem(at: url)
@@ -648,7 +645,7 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
         recordConfig.outputFileType = .mov
         recordConfig.videoCodecType = .h264
 
-        stream = SCStream(filter: filter, configuration: config, delegate: nil)
+        stream = SCStream(filter: filter, configuration: config, delegate: self)
         recordingOutput = SCRecordingOutput(configuration: recordConfig, delegate: self)
 
         guard let s = stream, let ro = recordingOutput else {
@@ -1163,6 +1160,13 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate {
 
     // MARK: - Delegate Methods
     // CRITICAL: Must be nonisolated because SCKit calls these on a background thread
+    nonisolated func stream(_ stream: SCStream, didStopWithError error: Error) {
+        Task { @MainActor in
+            self.statusMessage = "Stream stopped: \(error.localizedDescription)"
+            self.isRecording = false
+        }
+    }
+
     nonisolated func recordingOutput(_ recordingOutput: SCRecordingOutput, didFinishRecordingTo url: URL) {
         Task { @MainActor in
             self.recordingFinishedContinuation?.resume()
