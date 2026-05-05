@@ -7,7 +7,7 @@ enum AppView { case record, library }
 // MARK: - Content View
 
 struct ContentView: View {
-    @StateObject var manager = MeetingManager()
+    @ObservedObject var manager: MeetingManager
     @State private var activeView: AppView = .record
     @State private var isSettingsOpen = false
 

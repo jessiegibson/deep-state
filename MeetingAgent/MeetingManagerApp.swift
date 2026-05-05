@@ -11,16 +11,16 @@ import SwiftUI
 @main
 struct MeetingAgentApp: App {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
-    @StateObject private var onboardingManager = MeetingManager()
-    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate 
+    @StateObject private var manager = MeetingManager()
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
         WindowGroup {
             if hasCompletedOnboarding {
-                ContentView()
+                ContentView(manager: manager)
             } else {
                 OnboardingView(
-                    manager: onboardingManager,
+                    manager: manager,
                     hasCompletedOnboarding: $hasCompletedOnboarding
                 )
             }
