@@ -154,6 +154,10 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate, SCS
             return
         }
 
+        // Release any AVAudioRecorder before ScreenCaptureKit starts — competing HAL clients
+        // cause HALC_ProxyIOContext _StartIO to fail with error 35 (resource busy)
+        stopMonitoring()
+
         statusMessage = "Starting..."
         recordingSegments = []
         segmentCounter = 0
@@ -619,6 +623,13 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate, SCS
                               userInfo: [NSLocalizedDescriptionKey: "Screen Recording permission required. Check System Settings → Privacy & Security → Screen Recording"])
             }
         }
+
+        // Tear down any stale stream from a previous failed attempt
+        if let s = stream {
+            try? await s.stopCapture()
+            stream = nil
+        }
+        recordingOutput = nil
 
         let content = try await SCShareableContent.current
         guard let display = content.displays.first else {
@@ -1186,6 +1197,11 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate, SCS
 
 extension MeetingManager {
     func startMonitoring() {
+        // Stop any existing recorder before starting a new one
+        audioRecorder?.stop()
+        audioRecorder = nil
+        timer?.invalidate()
+
         let settings = [
             AVFormatIDKey: Int(kAudioFormatAppleLossless),
             AVSampleRateKey: 44100.0,
