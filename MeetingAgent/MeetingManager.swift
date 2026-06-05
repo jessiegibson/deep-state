@@ -909,14 +909,26 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate, SCS
             let inputNode = engine.inputNode
             let recordingFormat = inputNode.outputFormat(forBus: 0)
 
-            // Prepare WAV file for writing
+            // Prepare WAV file for writing. AVAudioEngine input delivers 32-bit float
+            // PCM in the device's native format, but AVAssetExportSession rejects float
+            // PCM WAVs. Force standard 16-bit signed integer PCM so the M4A conversion
+            // (and any downstream reader) accepts it.
             let tempURL = FileManager.default.temporaryDirectory
                 .appendingPathComponent("audio_only_recording.wav")
             if FileManager.default.fileExists(atPath: tempURL.path) {
                 try? FileManager.default.removeItem(at: tempURL)
             }
 
-            let file = try AVAudioFile(forWriting: tempURL, settings: recordingFormat.settings)
+            let writeSettings: [String: Any] = [
+                AVFormatIDKey: kAudioFormatLinearPCM,
+                AVSampleRateKey: recordingFormat.sampleRate,
+                AVNumberOfChannelsKey: recordingFormat.channelCount,
+                AVLinearPCMBitDepthKey: 16,
+                AVLinearPCMIsFloatKey: false,
+                AVLinearPCMIsBigEndianKey: false,
+                AVLinearPCMIsNonInterleaved: false
+            ]
+            let file = try AVAudioFile(forWriting: tempURL, settings: writeSettings)
             self.audioFile = file
             self.audioOnlyURL = tempURL
 
@@ -1016,16 +1028,20 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate, SCS
 
         // Convert WAV to M4A for smaller file size
         statusMessage = "Converting audio..."
-        guard let m4aURL = try? await convertToM4A(from: wavURL) else {
-            // If conversion fails, use the live transcript with the WAV file
-            if !liveTranscript.isEmpty {
-                statusMessage = "Saving with live transcript..."
-                saveTranscript(text: liveTranscript, videoURL: nil, audioURL: wavURL)
-                try? FileManager.default.removeItem(at: wavURL)
-                statusMessage = "Saved successfully"
-            } else {
-                statusMessage = "Audio conversion failed"
-            }
+        let m4aURL: URL
+        do {
+            m4aURL = try await convertToM4A(from: wavURL)
+        } catch {
+            // Conversion failed. Don't lose the recording. Save the WAV instead
+            // and use whatever transcript exists (live transcript or empty).
+            print("[MeetingManager] M4A conversion failed: \(error)")
+            statusMessage = "Saving raw audio (M4A conversion failed)..."
+            let fallbackText = liveTranscript.isEmpty
+                ? "_Transcript unavailable. Audio saved as WAV._"
+                : liveTranscript
+            saveTranscript(text: fallbackText, videoURL: nil, audioURL: wavURL)
+            try? FileManager.default.removeItem(at: wavURL)
+            statusMessage = "Saved (WAV, no M4A)"
             return
         }
 

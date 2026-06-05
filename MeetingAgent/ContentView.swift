@@ -15,8 +15,14 @@ struct ContentView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header
-            HStack {
+            HStack(spacing: NBDesign.smallPadding) {
+                Image("deep-state-logo")
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: 32, height: 32)
                 Text("deep state Meeting Agent")
+                    .font(.system(size: 16, weight: .bold, design: .monospaced))
+                    .foregroundStyle(NBDesign.background)
                 Spacer()
                 HStack(spacing: 0) {
                     tabButton("RECORD", tab: .record)
