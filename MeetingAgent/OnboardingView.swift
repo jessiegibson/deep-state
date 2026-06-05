@@ -9,8 +9,9 @@ struct OnboardingView: View {
     @State private var micGranted = false
     @State private var screenGranted = false
     @State private var speechGranted = false
+    @State private var calendarGranted = false
 
-    private let totalSteps = 5
+    private let totalSteps = 6
 
     var body: some View {
         VStack(spacing: 0) {
@@ -34,7 +35,8 @@ struct OnboardingView: View {
                 case 1: microphoneStep
                 case 2: screenRecordingStep
                 case 3: speechRecognitionStep
-                case 4: folderSelectionStep
+                case 4: calendarStep
+                case 5: folderSelectionStep
                 default: EmptyView()
                 }
             }
@@ -75,6 +77,7 @@ struct OnboardingView: View {
             micGranted = manager.microphonePermissionStatus() == .granted
             screenGranted = manager.screenRecordingPermissionStatus() == .granted
             speechGranted = manager.speechRecognitionPermissionStatus() == .granted
+            calendarGranted = CalendarManager.shared.checkStatus() == .granted
         }
     }
 
@@ -135,6 +138,20 @@ struct OnboardingView: View {
             action: {
                 Task {
                     speechGranted = await manager.requestSpeechRecognitionPermission()
+                }
+            }
+        )
+    }
+
+    private var calendarStep: some View {
+        permissionStep(
+            icon: "calendar",
+            title: "CALENDAR",
+            description: "Lets the app title recordings automatically and suggest\nspeaker names from meeting attendees.",
+            isGranted: calendarGranted,
+            action: {
+                Task {
+                    calendarGranted = await CalendarManager.shared.requestAccess()
                 }
             }
         )

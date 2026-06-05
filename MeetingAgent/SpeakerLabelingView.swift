@@ -19,11 +19,12 @@ struct SpeakerLabelingView: View {
         Set(editedSegments.map(\.clusterID)).count
     }
 
-    // Name suggestions from voice print store + already-entered names
+    // Name suggestions from voice print store + already-entered names + calendar attendees
     private var nameSuggestions: [String] {
         let stored = VoicePrintStore.shared.knownNames
         let entered = nameInputs.values.filter { !$0.isEmpty }
-        return Array(Set(stored + entered)).sorted()
+        let attendees = manager.calendarAttendees
+        return Array(Set(stored + entered + attendees)).sorted()
     }
 
     var body: some View {

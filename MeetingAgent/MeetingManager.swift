@@ -6,6 +6,7 @@ import Combine
 import AVFoundation
 import Speech
 import UniformTypeIdentifiers
+import EventKit
 
 
 enum RecordingMode: String, CaseIterable {
@@ -41,6 +42,9 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate, SCS
     @Published var isSummarizing = false
     @Published var summaryResult: String? = nil
     @Published var summaryError: String? = nil
+
+    // Calendar integration
+    @Published var calendarAttendees: [String] = []
 
     // Import & retranscribe
     @Published var isImporting = false
@@ -149,6 +153,18 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate, SCS
     
     // MARK: - Recording Logic
     func start() async {
+        // Pre-fill title and attendees from the selected calendar event (if any).
+        // Only overwrite the title if the user hasn't typed a custom one.
+        let cal = CalendarManager.shared
+        if let event = cal.selectedEvent {
+            if meetingTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                meetingTitle = event.title ?? ""
+            }
+            calendarAttendees = cal.attendeeNames(for: event)
+        } else {
+            calendarAttendees = []
+        }
+
         if recordingMode == .audioOnly {
             await startAudioOnly()
             return
@@ -164,7 +180,6 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate, SCS
         isPaused = false
 
         meetingNotes = ""
-        meetingTitle = ""
         isNotesSheetOpen = true
 
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("temp_rec_0.mov")
@@ -735,6 +750,10 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate, SCS
 
         if let folder = result {
             statusMessage = "Saved to \(folder.lastPathComponent)"
+            // Reset calendar-driven state so the next recording starts clean.
+            meetingTitle = ""
+            calendarAttendees = []
+            CalendarManager.shared.selectedEvent = nil
         } else if storage.rootURL == nil {
             statusMessage = "No save location selected"
         } else {
@@ -953,7 +972,6 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate, SCS
             isRecording = true
             liveTranscript = ""
             meetingNotes = ""
-            meetingTitle = ""
             isNotesSheetOpen = true
             statusMessage = "Recording (Audio Only)..."
         } catch {
