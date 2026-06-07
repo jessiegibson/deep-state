@@ -19,7 +19,7 @@ enum PermissionStatus {
 }
 
 @MainActor
-class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate, SCStreamDelegate {
+class MeetingManager: NSObject, ObservableObject {
     @Published var isRecording = false
     @Published var statusMessage = "Ready"
     @Published var liveTranscript = ""
@@ -50,8 +50,7 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate, SCS
     @Published var isRetranscribing = false
     @Published var retranscribeProgress = ""
 
-    private var stream: SCStream?
-    private var recordingOutput: SCRecordingOutput?
+    private let screenRecorder = ScreenRecorder()
     private var lastRecordingURL: URL?
     private let whisperTranscriber = WhisperTranscriber()
 
@@ -85,7 +84,6 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate, SCS
     @Published var meetingLibrary: [MeetingRecord] = []
     private var recordingSegments: [URL] = []
     private var segmentCounter = 0
-    private var recordingFinishedContinuation: CheckedContinuation<Void, Never>?
 
     // Speaker diarization
     private let analyticsCollector = VoiceAnalyticsCollector()
@@ -114,6 +112,16 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate, SCS
         // Transcription progress messages surface in the status line.
         whisperTranscriber.onStatus = { [weak self] message in
             self?.statusMessage = message
+        }
+
+        // Screen-capture stream/recorder failures stop recording and report status.
+        screenRecorder.onStreamStopped = { [weak self] error in
+            self?.statusMessage = "Stream stopped: \(error.localizedDescription)"
+            self?.isRecording = false
+        }
+        screenRecorder.onRecorderError = { [weak self] error in
+            self?.statusMessage = "Recorder Error: \(error.localizedDescription)"
+            self?.isRecording = false
         }
 
         // StorageManager.shared handles folder resolution (iCloud or local bookmark)
@@ -176,7 +184,8 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate, SCS
         self.lastRecordingURL = url
 
         do {
-            try await startScreenRecording(to: url)
+            screenRecorder.captureSystemAudio = shouldRecordSystemAudio
+            try await screenRecorder.startCapture(to: url)
             isRecording = true
             statusMessage = "Recording..."
         } catch {
@@ -195,16 +204,9 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate, SCS
         isPaused = false
 
         do {
-            // Remove recording output to trigger file finalization, then wait for delegate callback
-            if let s = stream, let ro = recordingOutput {
-                try s.removeRecordingOutput(ro)
-                await withCheckedContinuation { continuation in
-                    self.recordingFinishedContinuation = continuation
-                }
-            }
-            try await stream?.stopCapture()
-            stream = nil
-            recordingOutput = nil
+            // Finalize the current segment's MOV (removeRecordingOutput → await
+            // didFinishRecordingTo:) and stop capture before reading the file.
+            try await screenRecorder.finalizeAndStop()
             isRecording = false
 
             if let currentURL = lastRecordingURL {
@@ -220,7 +222,7 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate, SCS
             let videoURL: URL
             if recordingSegments.count > 1 {
                 statusMessage = "Merging recording segments..."
-                videoURL = try await mergeVideoSegments(recordingSegments)
+                videoURL = try await screenRecorder.mergeSegments(recordingSegments)
             } else {
                 videoURL = recordingSegments[0]
             }
@@ -263,16 +265,8 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate, SCS
             statusMessage = "Paused"
         } else {
             do {
-                // Remove recording output to finalize the segment file before pausing
-                if let s = stream, let ro = recordingOutput {
-                    try s.removeRecordingOutput(ro)
-                    await withCheckedContinuation { continuation in
-                        self.recordingFinishedContinuation = continuation
-                    }
-                }
-                try await stream?.stopCapture()
-                stream = nil
-                recordingOutput = nil
+                // Finalize the current segment file before pausing.
+                try await screenRecorder.finalizeAndStop()
                 if let url = lastRecordingURL {
                     recordingSegments.append(url)
                 }
@@ -307,7 +301,8 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate, SCS
                 .appendingPathComponent("temp_rec_\(segmentCounter).mov")
             self.lastRecordingURL = url
             do {
-                try await startScreenRecording(to: url)
+                screenRecorder.captureSystemAudio = shouldRecordSystemAudio
+                try await screenRecorder.startCapture(to: url)
                 isPaused = false
                 statusMessage = "Recording..."
             } catch {
@@ -538,105 +533,6 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate, SCS
         }
 
         return headerSections.joined(separator: separator) + separator + "## Transcript\n\n\(newTranscript)"
-    }
-
-    // MARK: - Screen Recording Helper
-    private func startScreenRecording(to url: URL) async throws {
-        if #available(macOS 14.0, *) {
-            if !CGPreflightScreenCaptureAccess() {
-                throw NSError(domain: "MeetingManager", code: 1,
-                              userInfo: [NSLocalizedDescriptionKey: "Screen Recording permission required. Check System Settings → Privacy & Security → Screen Recording"])
-            }
-        }
-
-        // Tear down any stale stream from a previous failed attempt
-        if let s = stream {
-            try? await s.stopCapture()
-            stream = nil
-        }
-        recordingOutput = nil
-
-        let content = try await SCShareableContent.current
-        guard let display = content.displays.first else {
-            throw NSError(domain: "MeetingManager", code: 2,
-                          userInfo: [NSLocalizedDescriptionKey: "No display found"])
-        }
-
-        let excludedWindows = content.windows.filter {
-            $0.owningApplication?.bundleIdentifier == Bundle.main.bundleIdentifier
-        }
-        let filter = SCContentFilter(display: display, excludingWindows: excludedWindows)
-
-        let config = SCStreamConfiguration()
-        config.width = Int(display.width)
-        config.height = Int(display.height)
-        config.capturesAudio = shouldRecordSystemAudio
-
-        if FileManager.default.fileExists(atPath: url.path) {
-            try? FileManager.default.removeItem(at: url)
-        }
-
-        let recordConfig = SCRecordingOutputConfiguration()
-        recordConfig.outputURL = url
-        recordConfig.outputFileType = .mov
-        recordConfig.videoCodecType = .h264
-
-        stream = SCStream(filter: filter, configuration: config, delegate: self)
-        recordingOutput = SCRecordingOutput(configuration: recordConfig, delegate: self)
-
-        guard let s = stream, let ro = recordingOutput else {
-            throw NSError(domain: "MeetingManager", code: 3,
-                          userInfo: [NSLocalizedDescriptionKey: "Failed to create stream or recording output"])
-        }
-
-        try s.addRecordingOutput(ro)
-        try await s.startCapture()
-    }
-
-    private func mergeVideoSegments(_ urls: [URL]) async throws -> URL {
-        let composition = AVMutableComposition()
-        var currentTime = CMTime.zero
-        var compositionTracks: [Int: AVMutableCompositionTrack] = [:]
-
-        for url in urls {
-            let asset = AVURLAsset(url: url)
-            let duration = try await asset.load(.duration)
-            let tracks = try await asset.load(.tracks)
-
-            for (index, track) in tracks.enumerated() {
-                let compositionTrack: AVMutableCompositionTrack
-                if let existing = compositionTracks[index] {
-                    compositionTrack = existing
-                } else {
-                    guard let newTrack = composition.addMutableTrack(
-                        withMediaType: track.mediaType,
-                        preferredTrackID: kCMPersistentTrackID_Invalid
-                    ) else { continue }
-                    compositionTracks[index] = newTrack
-                    compositionTrack = newTrack
-                }
-                try compositionTrack.insertTimeRange(
-                    CMTimeRange(start: .zero, duration: duration),
-                    of: track,
-                    at: currentTime
-                )
-            }
-            currentTime = CMTimeAdd(currentTime, duration)
-        }
-
-        let outputURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("merged_recording.mov")
-        try? FileManager.default.removeItem(at: outputURL)
-
-        guard let exportSession = AVAssetExportSession(
-            asset: composition, presetName: AVAssetExportPresetHighestQuality
-        ) else {
-            throw NSError(domain: "MeetingManager", code: -1,
-                          userInfo: [NSLocalizedDescriptionKey: "Failed to create export session for merge"])
-        }
-
-        try await exportSession.export(to: outputURL, as: .mov)
-        return outputURL
     }
 
     // MARK: - Folder Selection (delegates to StorageManager)
@@ -1079,30 +975,6 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate, SCS
         }.joined(separator: "\n\n")
     }
 
-    // MARK: - Delegate Methods
-    // CRITICAL: Must be nonisolated because SCKit calls these on a background thread
-    nonisolated func stream(_ stream: SCStream, didStopWithError error: Error) {
-        Task { @MainActor in
-            self.statusMessage = "Stream stopped: \(error.localizedDescription)"
-            self.isRecording = false
-        }
-    }
-
-    nonisolated func recordingOutput(_ recordingOutput: SCRecordingOutput, didFinishRecordingTo url: URL) {
-        Task { @MainActor in
-            self.recordingFinishedContinuation?.resume()
-            self.recordingFinishedContinuation = nil
-        }
-    }
-
-    nonisolated func recordingOutput(_ recordingOutput: SCRecordingOutput, didFailWithError error: Error) {
-        Task { @MainActor in
-            self.recordingFinishedContinuation?.resume()
-            self.recordingFinishedContinuation = nil
-            self.statusMessage = "Recorder Error: \(error.localizedDescription)"
-            self.isRecording = false
-        }
-    }
 }
 
 extension MeetingManager {
