@@ -19,7 +19,7 @@ final class AudioRecorder {
     /// Standard 16-bit signed integer PCM. AVAudioEngine input delivers 32-bit float
     /// PCM, but AVAssetExportSession rejects float-PCM WAVs — forcing 16-bit int keeps
     /// the downstream M4A conversion (and any reader) happy.
-    static func wavWriteSettings(sampleRate: Double, channels: AVAudioChannelCount) -> [String: Any] {
+    nonisolated static func wavWriteSettings(sampleRate: Double, channels: AVAudioChannelCount) -> [String: Any] {
         [
             AVFormatIDKey: kAudioFormatLinearPCM,
             AVSampleRateKey: sampleRate,
