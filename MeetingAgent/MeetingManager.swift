@@ -54,24 +54,12 @@ class MeetingManager: NSObject, ObservableObject {
     private var lastRecordingURL: URL?
     private let whisperTranscriber = WhisperTranscriber()
 
-    // Live transcription
-    private var speechRecognizer: SFSpeechRecognizer? = SFSpeechRecognizer()
-    private var audioEngine: AVAudioEngine?
-    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
-    private var recognitionTask: SFSpeechRecognitionTask?
-    // Accumulator for finalized recognition chunks. SFSpeechRecognizer emits multiple
-    // `isFinal` results per session (and on-device tasks cap around ~1 min), so we must
-    // append finalized text here and display `finalizedTranscript + currentPartial` —
-    // otherwise each new chunk's `formattedString` overwrites prior speech.
-    // FUTURE: consider WhisperKit streaming (option B) for higher live accuracy —
-    // would run WhisperKit on rolling audio windows in parallel with SFSpeech (kept for
-    // SFVoiceAnalytics-based speaker diarization). Gated on thermal state + hardware.
-    private var finalizedTranscript = ""
-    private var collectAnalyticsInLiveTask = false
+    // Live transcription + audio-only capture (extracted helpers)
+    private let liveTranscriber = LiveTranscriber()
+    private let audioRecorder = AudioRecorder()
 
-    // Audio-only recording
-    private var audioFile: AVAudioFile?
-    private var audioOnlyEngine: AVAudioEngine?
+    // Audio file to save once recording stops (WAV, then reassigned to the M4A used
+    // for the speaker-labeling handoff in finalizeWithSpeakerLabels).
     private var audioOnlyURL: URL?
 
     // Voice Visualizer Properties
@@ -85,9 +73,7 @@ class MeetingManager: NSObject, ObservableObject {
     private var recordingSegments: [URL] = []
     private var segmentCounter = 0
 
-    // Speaker diarization
-    private let analyticsCollector = VoiceAnalyticsCollector()
-    private var rawTranscriptionSegments: [SFTranscriptionSegment] = []
+    // Speaker diarization (voice analytics + raw segments live in LiveTranscriber)
     @Published var speakerSegments: [SpeakerSegment] = []
     @Published var isSpeakerLabelingOpen = false
 
@@ -122,6 +108,26 @@ class MeetingManager: NSObject, ObservableObject {
         screenRecorder.onRecorderError = { [weak self] error in
             self?.statusMessage = "Recorder Error: \(error.localizedDescription)"
             self?.isRecording = false
+        }
+
+        // Live transcript updates surface in the published transcript; rotation continues
+        // only while actively recording.
+        liveTranscriber.onTranscript = { [weak self] text in
+            self?.liveTranscript = text
+        }
+        liveTranscriber.isActive = { [weak self] in
+            guard let self = self else { return false }
+            return self.isRecording && !self.isPaused
+        }
+
+        // Audio-only capture feeds the transcriber and drives the visualizer.
+        audioRecorder.onBuffer = { [weak self] buffer in
+            self?.liveTranscriber.append(buffer)
+        }
+        audioRecorder.onAmplitudes = { [weak self] bars in
+            withAnimation(.linear(duration: 0.05)) {
+                self?.amplitudes = bars
+            }
         }
 
         // StorageManager.shared handles folder resolution (iCloud or local bookmark)
@@ -259,7 +265,7 @@ class MeetingManager: NSObject, ObservableObject {
         guard isRecording, !isPaused else { return }
 
         if recordingMode == .audioOnly {
-            audioOnlyEngine?.pause()
+            audioRecorder.pause()
             amplitudes = Array(repeating: 0.1, count: 5)
             isPaused = true
             statusMessage = "Paused"
@@ -283,14 +289,11 @@ class MeetingManager: NSObject, ObservableObject {
 
         if recordingMode == .audioOnly {
             do {
-                try audioOnlyEngine?.start()
+                try audioRecorder.resume()
                 isPaused = false
                 // If the recognition task ended while paused (e.g., hit the ~1 min cap),
-                // spin up a new one so live transcription resumes. The audio tap feeds
-                // `self.recognitionRequest`, which the helper replaces.
-                if recognitionTask == nil {
-                    startRotatingRecognitionTask(collectAnalytics: true)
-                }
+                // spin up a new one so live transcription resumes.
+                liveTranscriber.resumeIfStopped(collectAnalytics: true)
                 statusMessage = "Recording (Audio Only)..."
             } catch {
                 statusMessage = "Resume failed: \(error.localizedDescription)"
@@ -425,7 +428,7 @@ class MeetingManager: NSObject, ObservableObject {
                 audioURL = tempCopy
             } else {
                 importProgress = "Converting \(filename) (\(index + 1)/\(total))..."
-                audioURL = try await convertToM4A(from: tempCopy)
+                audioURL = try await audioRecorder.convertToM4A(from: tempCopy)
             }
             defer {
                 if audioURL != tempCopy { try? fm.removeItem(at: audioURL) }
@@ -567,134 +570,6 @@ class MeetingManager: NSObject, ObservableObject {
         }
     }
     
-    // MARK: - Live Speech-to-Text
-
-    /// Creates a fresh SFSpeechAudioBufferRecognitionRequest + task and wires the callback.
-    /// Accumulates finalized chunks into `finalizedTranscript` and rotates the task when
-    /// a result becomes final or the task ends — this is required because on-device tasks
-    /// cap around ~1 minute and each `isFinal` result resets `formattedString` on the
-    /// next partial. The audio tap feeds `self.recognitionRequest`, which this method
-    /// updates, so rotation is transparent to the tap.
-    private func startRotatingRecognitionTask(collectAnalytics: Bool) {
-        guard let recognizer = speechRecognizer, recognizer.isAvailable else {
-            print("❌ Speech recognizer not available for rotation")
-            return
-        }
-
-        let request = SFSpeechAudioBufferRecognitionRequest()
-        request.shouldReportPartialResults = true
-        request.requiresOnDeviceRecognition = true
-        self.recognitionRequest = request
-        self.collectAnalyticsInLiveTask = collectAnalytics
-
-        recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
-            guard let self = self else { return }
-
-            if let result = result {
-                if collectAnalytics {
-                    self.analyticsCollector.ingest(result: result)
-                }
-                let current = result.bestTranscription.formattedString
-                let segments = result.bestTranscription.segments
-                let isFinal = result.isFinal
-                Task { @MainActor in
-                    if collectAnalytics {
-                        self.rawTranscriptionSegments = segments
-                    }
-                    let joiner = self.finalizedTranscript.isEmpty ? "" : " "
-                    if isFinal {
-                        self.finalizedTranscript += joiner + current
-                        self.liveTranscript = self.finalizedTranscript
-                    } else {
-                        self.liveTranscript = self.finalizedTranscript + joiner + current
-                    }
-                }
-            }
-
-            if let error = error {
-                let nsError = error as NSError
-                print("⚠️ Recognition error: \(error.localizedDescription) code=\(nsError.code)")
-            }
-
-            // Rotate: if the task ended (final or error), spin up a new one so we keep
-            // transcribing beyond the per-task time cap. Only rotate if we're still
-            // recording — otherwise stop cleanly.
-            let ended = (result?.isFinal ?? false) || error != nil
-            if ended {
-                Task { @MainActor in
-                    guard self.isRecording, !self.isPaused else { return }
-                    // Avoid rotating if a newer request has already replaced this one.
-                    guard self.recognitionRequest === request else { return }
-                    self.startRotatingRecognitionTask(collectAnalytics: self.collectAnalyticsInLiveTask)
-                }
-            }
-        }
-    }
-
-    private func startLiveTranscription() throws {
-        print("🎤 Starting live transcription...")
-        
-        guard let recognizer = speechRecognizer, recognizer.isAvailable else {
-            print("❌ Speech recognizer not available")
-            throw NSError(domain: "MeetingManager", code: -1,
-                         userInfo: [NSLocalizedDescriptionKey: "Speech recognizer not available"])
-        }
-        
-        print("✅ Speech recognizer is available")
-        
-        // Initialize audio engine if needed
-        if audioEngine == nil {
-            audioEngine = AVAudioEngine()
-        }
-        
-        guard let audioEngine = audioEngine else {
-            throw NSError(domain: "MeetingManager", code: -1,
-                         userInfo: [NSLocalizedDescriptionKey: "Failed to create audio engine"])
-        }
-        
-        // Cancel any previous task and reset the live accumulator for a fresh session.
-        recognitionTask?.cancel()
-        recognitionTask = nil
-        finalizedTranscript = ""
-
-        let inputNode = audioEngine.inputNode
-        print("✅ Got input node: \(inputNode)")
-
-        // Start (and auto-rotate) the recognition task.
-        startRotatingRecognitionTask(collectAnalytics: false)
-        print("✅ Recognition task started")
-
-        // Configure the microphone input
-        let recordingFormat = inputNode.outputFormat(forBus: 0)
-        print("✅ Recording format: \(recordingFormat.sampleRate)Hz, \(recordingFormat.channelCount) channels")
-        
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] (buffer: AVAudioPCMBuffer, _: AVAudioTime) in
-            self?.recognitionRequest?.append(buffer)
-        }
-        
-        print("✅ Audio tap installed")
-        
-        audioEngine.prepare()
-        try audioEngine.start()
-        
-        print("✅ Audio engine started - Live transcription is NOW RUNNING")
-    }
-    
-    private func stopLiveTranscription() {
-        print("⏹️ Stopping live transcription")
-        print("   Current transcript length: \(liveTranscript.count) characters")
-        print("   Transcript preview: \(liveTranscript.prefix(100))")
-        
-        audioEngine?.stop()
-        audioEngine?.inputNode.removeTap(onBus: 0)
-        recognitionRequest?.endAudio()
-        recognitionTask?.cancel()
-        recognitionRequest = nil
-        recognitionTask = nil
-        
-        print("✅ Live transcription stopped")
-    }
-
     // MARK: - Audio-Only Recording
     private func startAudioOnly() async {
         statusMessage = "Starting audio recording..."
@@ -708,84 +583,17 @@ class MeetingManager: NSObject, ObservableObject {
             return
         }
 
+        guard liveTranscriber.isRecognizerAvailable else {
+            statusMessage = "Speech recognizer not available"
+            return
+        }
+
         do {
-            let engine = AVAudioEngine()
-            self.audioOnlyEngine = engine
-
-            let inputNode = engine.inputNode
-            let recordingFormat = inputNode.outputFormat(forBus: 0)
-
-            // Prepare WAV file for writing. AVAudioEngine input delivers 32-bit float
-            // PCM in the device's native format, but AVAssetExportSession rejects float
-            // PCM WAVs. Force standard 16-bit signed integer PCM so the M4A conversion
-            // (and any downstream reader) accepts it.
-            let tempURL = FileManager.default.temporaryDirectory
-                .appendingPathComponent("audio_only_recording.wav")
-            if FileManager.default.fileExists(atPath: tempURL.path) {
-                try? FileManager.default.removeItem(at: tempURL)
-            }
-
-            let writeSettings: [String: Any] = [
-                AVFormatIDKey: kAudioFormatLinearPCM,
-                AVSampleRateKey: recordingFormat.sampleRate,
-                AVNumberOfChannelsKey: recordingFormat.channelCount,
-                AVLinearPCMBitDepthKey: 16,
-                AVLinearPCMIsFloatKey: false,
-                AVLinearPCMIsBigEndianKey: false,
-                AVLinearPCMIsNonInterleaved: false
-            ]
-            let file = try AVAudioFile(forWriting: tempURL, settings: writeSettings)
-            self.audioFile = file
-            self.audioOnlyURL = tempURL
-
-            // Set up live transcription
-            guard let recognizer = speechRecognizer, recognizer.isAvailable else {
-                statusMessage = "Speech recognizer not available"
-                return
-            }
-
-            recognitionTask?.cancel()
-            recognitionTask = nil
-            finalizedTranscript = ""
-
-            analyticsCollector.reset()
-            rawTranscriptionSegments = []
-
-            // Start (and auto-rotate) the recognition task with analytics collection
-            // enabled for speaker diarization.
-            startRotatingRecognitionTask(collectAnalytics: true)
-
-            // Single tap: write to file + feed recognizer + compute amplitude
-            inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
-                guard let self = self else { return }
-
-                // Write to audio file
-                try? self.audioFile?.write(from: buffer)
-
-                // Feed to speech recognizer
-                self.recognitionRequest?.append(buffer)
-
-                // Compute amplitude for visualizer
-                guard let channelData = buffer.floatChannelData?[0] else { return }
-                let frameLength = Int(buffer.frameLength)
-                var sum: Float = 0
-                for i in 0..<frameLength {
-                    sum += abs(channelData[i])
-                }
-                let avg = sum / Float(frameLength)
-                let normalizedPower = max(0.1, CGFloat(avg) * 5.0)
-
-                Task { @MainActor in
-                    withAnimation(.linear(duration: 0.05)) {
-                        self.amplitudes = (0..<5).map { _ in
-                            min(1.0, normalizedPower * CGFloat.random(in: 0.8...1.2))
-                        }
-                    }
-                }
-            }
-
-            engine.prepare()
-            try engine.start()
+            // Start a fresh recognition session (resets transcript + analytics) with
+            // analytics collection enabled for speaker diarization, then begin capture.
+            liveTranscriber.startFresh(collectAnalytics: true)
+            let wavURL = try audioRecorder.start()
+            self.audioOnlyURL = wavURL
 
             isRecording = true
             liveTranscript = ""
@@ -793,6 +601,7 @@ class MeetingManager: NSObject, ObservableObject {
             isNotesSheetOpen = true
             statusMessage = "Recording (Audio Only)..."
         } catch {
+            liveTranscriber.cancel()
             statusMessage = "Error: \(error.localizedDescription)"
             print("Audio-only start error: \(error)")
         }
@@ -801,33 +610,17 @@ class MeetingManager: NSObject, ObservableObject {
     private func stopAudioOnly() async {
         statusMessage = "Stopping..."
 
-        // Stop engine and audio tap
-        audioOnlyEngine?.stop()
-        audioOnlyEngine?.inputNode.removeTap(onBus: 0)
-        audioFile = nil // Close the file handle
-
-        // Signal end of audio and wait for the final recognition result.
-        // The final result carries speechRecognitionMetadata.voiceAnalytics,
-        // which is needed for speaker diarization. Cancelling immediately
-        // would abort before that final callback fires.
-        recognitionRequest?.endAudio()
-        if let task = recognitionTask {
-            statusMessage = "Finishing transcription..."
-            // Wait up to 2 seconds for the recognizer to deliver the final result
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
-            // If still running, force cancel
-            if task.state == .running {
-                task.cancel()
-            }
-        }
-        recognitionRequest = nil
-        recognitionTask = nil
+        // Stop capture (closes the WAV file), then signal end of audio and wait for the
+        // final recognition result — it carries the voice analytics needed for diarization.
+        audioRecorder.stop()
+        statusMessage = "Finishing transcription..."
+        await liveTranscriber.endAndAwaitFinal()
 
         isRecording = false
         isPaused = false
         amplitudes = Array(repeating: 0.1, count: 5)
 
-        guard let wavURL = audioOnlyURL else {
+        guard let wavURL = audioRecorder.wavURL else {
             statusMessage = "No recording found"
             return
         }
@@ -836,7 +629,7 @@ class MeetingManager: NSObject, ObservableObject {
         statusMessage = "Converting audio..."
         let m4aURL: URL
         do {
-            m4aURL = try await convertToM4A(from: wavURL)
+            m4aURL = try await audioRecorder.convertToM4A(from: wavURL)
         } catch {
             // Conversion failed. Don't lose the recording. Save the WAV instead
             // and use whatever transcript exists (live transcript or empty).
@@ -852,12 +645,13 @@ class MeetingManager: NSObject, ObservableObject {
         }
 
         // Use live transcript if available, otherwise transcribe with WhisperKit
+        let rawSegments = liveTranscriber.rawTranscriptionSegments
         let transcriptText: String
         if !liveTranscript.isEmpty {
             // Format live transcript segments into paragraphs
-            let formatted = rawTranscriptionSegments.isEmpty
+            let formatted = rawSegments.isEmpty
                 ? TranscriptFormatter.formatPlainText(liveTranscript)
-                : TranscriptFormatter.format(sfSegments: rawTranscriptionSegments)
+                : TranscriptFormatter.format(sfSegments: rawSegments)
             transcriptText = formatted.isEmpty ? liveTranscript : formatted
         } else {
             statusMessage = "Transcribing with AI..."
@@ -865,13 +659,13 @@ class MeetingManager: NSObject, ObservableObject {
         }
 
         // Run speaker diarization if we captured voice analytics
-        let vectors = analyticsCollector.vectors
-        print("🔊 Diarization check: \(vectors.count) voice vectors, \(rawTranscriptionSegments.count) transcription segments")
-        if !vectors.isEmpty && !rawTranscriptionSegments.isEmpty {
+        let vectors = liveTranscriber.voiceVectors
+        print("🔊 Diarization check: \(vectors.count) voice vectors, \(rawSegments.count) transcription segments")
+        if !vectors.isEmpty && !rawSegments.isEmpty {
             statusMessage = "Identifying speakers..."
             let segments = SpeakerSegmentBuilder.build(
                 from: vectors,
-                transcriptionSegments: rawTranscriptionSegments
+                transcriptionSegments: rawSegments
             )
             // Pre-match against known voice prints
             speakerSegments = segments.map { seg in
@@ -901,23 +695,6 @@ class MeetingManager: NSObject, ObservableObject {
         isNotesSheetOpen = false
         loadLibrary()
         statusMessage = "Saved successfully"
-    }
-
-    private func convertToM4A(from sourceURL: URL) async throws -> URL {
-        let asset = AVURLAsset(url: sourceURL)
-        let outputURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("audio_converted.m4a")
-        try? FileManager.default.removeItem(at: outputURL)
-
-        guard let exportSession = AVAssetExportSession(
-            asset: asset, presetName: AVAssetExportPresetAppleM4A
-        ) else {
-            throw NSError(domain: "MeetingManager", code: -1,
-                          userInfo: [NSLocalizedDescriptionKey: "Failed to create export session"])
-        }
-
-        try await exportSession.export(to: outputURL, as: .m4a)
-        return outputURL
     }
 
     // MARK: - Permission Status (for Onboarding)
