@@ -53,7 +53,7 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate, SCS
     private var stream: SCStream?
     private var recordingOutput: SCRecordingOutput?
     private var lastRecordingURL: URL?
-    private var whisper: WhisperKit? // Keep instance alive to avoid reloading model
+    private let whisperTranscriber = WhisperTranscriber()
 
     // Live transcription
     private var speechRecognizer: SFSpeechRecognizer? = SFSpeechRecognizer()
@@ -111,6 +111,11 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate, SCS
             }
         }
 
+        // Transcription progress messages surface in the status line.
+        whisperTranscriber.onStatus = { [weak self] message in
+            self?.statusMessage = message
+        }
+
         // StorageManager.shared handles folder resolution (iCloud or local bookmark)
         print("Folder loaded")
         
@@ -129,13 +134,10 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate, SCS
     // MARK: - Setup
     private func setupEngine() async {
         statusMessage = "Loading AI Model..."
-        do {
-            // Load WhisperKit once at startup (this can take a few seconds)
-            // Note: Ensure you are using the correct model variant for your Mac's RAM
-            whisper = try await WhisperKit()
+        if let error = await whisperTranscriber.load() {
+            statusMessage = "AI Load Failed: \(error)"
+        } else {
             statusMessage = "Ready"
-        } catch {
-            statusMessage = "AI Load Failed: \(error.localizedDescription)"
         }
     }
     
@@ -314,72 +316,9 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate, SCS
         }
     }
 
-    // MARK: - Transcription (WhisperKit primary, Apple Speech Neural Engine fallback)
+    // MARK: - Transcription (delegates to WhisperTranscriber)
     private func transcribeAudio(audioURL: URL) async -> String {
-        // Try WhisperKit first
-        if let whisper = whisper {
-            do {
-                print("🎤 Transcribing audio file with WhisperKit...")
-                statusMessage = "Transcribing with AI..."
-                let results = try await whisper.transcribe(audioPath: audioURL.path)
-
-                if let first = results.first, !first.text.isEmpty {
-                    print("✅ WhisperKit transcription successful: \(first.text.count) characters")
-                    let formatted = TranscriptFormatter.format(segments: first.segments)
-                    return formatted.isEmpty ? first.text : formatted
-                } else {
-                    print("⚠️ WhisperKit: No speech detected, trying Apple Speech fallback...")
-                }
-            } catch {
-                print("❌ WhisperKit error: \(error.localizedDescription), trying Apple Speech fallback...")
-            }
-        } else {
-            print("⚠️ WhisperKit not loaded, using Apple Speech fallback...")
-        }
-
-        // Fallback: Apple Speech with on-device Neural Engine
-        statusMessage = "Transcribing with Apple Speech (fallback)..."
-        if let appleSpeechResult = await transcribeWithAppleSpeech(audioURL: audioURL) {
-            return appleSpeechResult
-        }
-
-        return "Transcription failed - both WhisperKit and Apple Speech unavailable"
-    }
-
-    /// On-device Neural Engine transcription using Apple's SFSpeechURLRecognitionRequest
-    private func transcribeWithAppleSpeech(audioURL: URL) async -> String? {
-        guard let recognizer = speechRecognizer, recognizer.isAvailable else {
-            print("❌ Apple Speech recognizer not available")
-            return nil
-        }
-
-        let request = SFSpeechURLRecognitionRequest(url: audioURL)
-        request.requiresOnDeviceRecognition = true
-
-        return await withCheckedContinuation { continuation in
-            var hasResumed = false
-            recognizer.recognitionTask(with: request) { result, error in
-                guard !hasResumed else { return }
-
-                if let error = error {
-                    print("❌ Apple Speech error: \(error.localizedDescription)")
-                    hasResumed = true
-                    continuation.resume(returning: nil)
-                    return
-                }
-
-                guard let result = result else { return }
-
-                if result.isFinal {
-                    hasResumed = true
-                    let segments = result.bestTranscription.segments
-                    let formatted = TranscriptFormatter.format(sfSegments: segments)
-                    let text = formatted.isEmpty ? result.bestTranscription.formattedString : formatted
-                    print("✅ Apple Speech transcription successful: \(text.count) characters")
-                    continuation.resume(returning: text.isEmpty ? nil : text)
-                }
-            }
-        }
+        await whisperTranscriber.transcribe(audioURL: audioURL)
     }
 
     // MARK: - Audio Extraction
