@@ -77,8 +77,7 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate, SCS
 
     // Voice Visualizer Properties
     @Published var amplitudes: [CGFloat] = Array(repeating: 0.1, count: 5)
-    private var audioRecorder: AVAudioRecorder?
-    private var timer: Timer?
+    private let ambientMonitor = AmbientLevelMonitor()
     @Published var isPaused = false
     @Published var isNotesSheetOpen = false
     @Published var meetingNotes = ""
@@ -102,8 +101,15 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate, SCS
 
     override init() {
         super.init()
-        
+
         print("MeetingManager init started")
+
+        // Idle visualizer levels flow back into our published amplitudes.
+        ambientMonitor.onAmplitudes = { [weak self] bars in
+            withAnimation(.linear(duration: 0.05)) {
+                self?.amplitudes = bars
+            }
+        }
 
         // StorageManager.shared handles folder resolution (iCloud or local bookmark)
         print("Folder loaded")
@@ -1161,52 +1167,13 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate, SCS
 }
 
 extension MeetingManager {
+    // Forwarders to AmbientLevelMonitor (idle voice visualizer). Called by ContentView.
     func startMonitoring() {
-        // Stop any existing recorder before starting a new one
-        audioRecorder?.stop()
-        audioRecorder = nil
-        timer?.invalidate()
-
-        let settings = [
-            AVFormatIDKey: Int(kAudioFormatAppleLossless),
-            AVSampleRateKey: 44100.0,
-            AVNumberOfChannelsKey: 1,
-            AVEncoderAudioQualityKey: AVAudioQuality.min.rawValue
-        ] as [String : Any]
-
-        do {
-            audioRecorder = try AVAudioRecorder(url: URL(fileURLWithPath: "/dev/null"), settings: settings)
-            audioRecorder?.isMeteringEnabled = true
-            audioRecorder?.record()
-            
-            // Update the visualizer 20 times per second
-            timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
-                guard let self = self else { return }
-                
-                Task { @MainActor [weak self] in
-                    guard let self = self else { return }
-                    self.audioRecorder?.updateMeters()
-                    let power = self.audioRecorder?.averagePower(forChannel: 0) ?? -60
-                    
-                    // Map the decibels (-60 to 0) to a scale of 0.1 to 1.0
-                    let normalizedPower = max(0.1, CGFloat(pow(10, power / 20)))
-                    
-                    withAnimation(.linear(duration: 0.05)) {
-                        // Create a staggered effect for the 5 bars
-                        self.amplitudes = (0..<5).map { i in
-                            normalizedPower * CGFloat.random(in: 0.8...1.2)
-                        }
-                    }
-                }
-            }
-        } catch {
-            print("Visualizer failed: \(error)")
-        }
+        ambientMonitor.start()
     }
 
     func stopMonitoring() {
-        timer?.invalidate()
-        audioRecorder?.stop()
+        ambientMonitor.stop()
         amplitudes = Array(repeating: 0.1, count: 5)
     }
 }
