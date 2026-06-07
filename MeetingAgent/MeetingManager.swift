@@ -37,11 +37,9 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate, SCS
         didSet { UserDefaults.standard.set(shouldRecordSystemAudio, forKey: "pref_record_audio") }
     }
 
-    // LLM summarization
+    // LLM settings accessor (passed to LLMSettingsView). Summarization itself lives
+    // in TranscriptViewModel — MeetingManager only exposes the shared settings object.
     let llmSettings = LLMSettings.shared
-    @Published var isSummarizing = false
-    @Published var summaryResult: String? = nil
-    @Published var summaryError: String? = nil
 
     // Calendar integration
     @Published var calendarAttendees: [String] = []
@@ -97,24 +95,8 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate, SCS
     @Published var isSpeakerLabelingOpen = false
 
     func checkPermissions() {
-        // Microphone Check
-        switch AVCaptureDevice.authorizationStatus(for: .audio) {
-        case .notDetermined:
-            AVCaptureDevice.requestAccess(for: .audio) { _ in }
-        case .denied, .restricted:
-            Task { @MainActor in
-                self.statusMessage = "Microphone access denied. Enable in Settings."
-            }
-        default:
-            break
-        }
-
-        // Screen Recording Check (macOS 14+)
-        if #available(macOS 14.0, *) {
-            if !CGPreflightScreenCaptureAccess() {
-                // This opens the system dialog
-                CGRequestScreenCaptureAccess()
-            }
+        if let message = PermissionsService.requestStartupPermissions() {
+            statusMessage = message
         }
     }
 
@@ -394,23 +376,6 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate, SCS
         }
     }
 
-    // MARK: - LLM Summarization
-    func summarize(transcript: String, template: SummaryTemplate) async {
-        isSummarizing = true
-        summaryResult = nil
-        summaryError = nil
-
-        do {
-            let provider = try llmSettings.summaryLLM()
-            let result = try await provider.complete(systemPrompt: template.systemPrompt, userContent: transcript)
-            summaryResult = result
-        } catch {
-            summaryError = error.localizedDescription
-        }
-        isSummarizing = false
-    }
-
-    
     // MARK: - Audio Extraction
     private func extractAudio(from videoURL: URL) async throws -> URL? {
         let asset = AVURLAsset(url: videoURL)
@@ -1115,52 +1080,18 @@ class MeetingManager: NSObject, ObservableObject, SCRecordingOutputDelegate, SCS
     }
 
     // MARK: - Permission Status (for Onboarding)
-    func microphonePermissionStatus() -> PermissionStatus {
-        switch AVCaptureDevice.authorizationStatus(for: .audio) {
-        case .authorized: return .granted
-        case .denied, .restricted: return .denied
-        case .notDetermined: return .notDetermined
-        @unknown default: return .notDetermined
-        }
-    }
+    // Thin forwarders to PermissionsService so OnboardingView call sites are unchanged.
+    func microphonePermissionStatus() -> PermissionStatus { PermissionsService.microphoneStatus() }
 
-    func requestMicrophonePermission() async -> Bool {
-        await withCheckedContinuation { continuation in
-            AVCaptureDevice.requestAccess(for: .audio) { granted in
-                continuation.resume(returning: granted)
-            }
-        }
-    }
+    func requestMicrophonePermission() async -> Bool { await PermissionsService.requestMicrophone() }
 
-    func screenRecordingPermissionStatus() -> PermissionStatus {
-        if #available(macOS 14.0, *) {
-            return CGPreflightScreenCaptureAccess() ? .granted : .notDetermined
-        }
-        return .granted
-    }
+    func screenRecordingPermissionStatus() -> PermissionStatus { PermissionsService.screenRecordingStatus() }
 
-    func requestScreenRecordingPermission() {
-        if #available(macOS 14.0, *) {
-            CGRequestScreenCaptureAccess()
-        }
-    }
+    func requestScreenRecordingPermission() { PermissionsService.requestScreenRecording() }
 
-    func speechRecognitionPermissionStatus() -> PermissionStatus {
-        switch SFSpeechRecognizer.authorizationStatus() {
-        case .authorized: return .granted
-        case .denied, .restricted: return .denied
-        case .notDetermined: return .notDetermined
-        @unknown default: return .notDetermined
-        }
-    }
+    func speechRecognitionPermissionStatus() -> PermissionStatus { PermissionsService.speechRecognitionStatus() }
 
-    func requestSpeechRecognitionPermission() async -> Bool {
-        await withCheckedContinuation { continuation in
-            SFSpeechRecognizer.requestAuthorization { status in
-                continuation.resume(returning: status == .authorized)
-            }
-        }
-    }
+    func requestSpeechRecognitionPermission() async -> Bool { await PermissionsService.requestSpeechRecognition() }
 
     // MARK: - Speaker Diarization
 
