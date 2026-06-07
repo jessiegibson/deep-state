@@ -57,6 +57,7 @@ class MeetingManager: NSObject, ObservableObject {
     // Live transcription + audio-only capture (extracted helpers)
     private let liveTranscriber = LiveTranscriber()
     private let audioRecorder = AudioRecorder()
+    private let fileImportService = FileImportService()
 
     // Audio file to save once recording stops (WAV, then reassigned to the M4A used
     // for the speaker-labeling handoff in finalizeWithSpeakerLabels).
@@ -129,6 +130,24 @@ class MeetingManager: NSObject, ObservableObject {
                 self?.amplitudes = bars
             }
         }
+
+        // File import / retranscribe: inject audio transforms, surface progress.
+        fileImportService.transcribe = { [weak self] url in
+            await self?.whisperTranscriber.transcribe(audioURL: url) ?? ""
+        }
+        fileImportService.extractAudio = { [weak self] url in
+            try await self?.extractAudio(from: url) ?? nil
+        }
+        fileImportService.convertToM4A = { [weak self] url in
+            guard let self = self else { throw CancellationError() }
+            return try await self.audioRecorder.convertToM4A(from: url)
+        }
+        fileImportService.onImportingChanged = { [weak self] v in self?.isImporting = v }
+        fileImportService.onImportProgress = { [weak self] v in self?.importProgress = v }
+        fileImportService.onRetranscribingChanged = { [weak self] v in self?.isRetranscribing = v }
+        fileImportService.onRetranscribeProgress = { [weak self] v in self?.retranscribeProgress = v }
+        fileImportService.onStatus = { [weak self] v in self?.statusMessage = v }
+        fileImportService.onLibraryChanged = { [weak self] in self?.loadLibrary() }
 
         // StorageManager.shared handles folder resolution (iCloud or local bookmark)
         print("Folder loaded")
@@ -361,181 +380,18 @@ class MeetingManager: NSObject, ObservableObject {
         }
     }
 
-    // MARK: - Import External Files
+    // MARK: - Import & Retranscribe (delegates to FileImportService)
 
     func importFiles() async {
-        guard savedFolderURL != nil else {
-            statusMessage = "Select a save folder first"
-            return
-        }
-
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = true
-        panel.allowedContentTypes = [.audio, .movie]
-        panel.message = "Select audio or video files to import and transcribe"
-
-        guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
-
-        let urls = panel.urls
-        isImporting = true
-        importProgress = ""
-
-        for (index, url) in urls.enumerated() {
-            await importSingleFile(fileURL: url, index: index, total: urls.count)
-        }
-
-        isImporting = false
-        importProgress = ""
-        loadLibrary()
-        statusMessage = "Imported \(urls.count) file\(urls.count == 1 ? "" : "s")"
+        await fileImportService.importFiles()
     }
-
-    private func importSingleFile(fileURL: URL, index: Int, total: Int) async {
-        let filename = fileURL.deletingPathExtension().lastPathComponent
-        let ext = fileURL.pathExtension.lowercased()
-        importProgress = "Processing \(filename) (\(index + 1)/\(total))..."
-
-        _ = fileURL.startAccessingSecurityScopedResource()
-        defer { fileURL.stopAccessingSecurityScopedResource() }
-
-        let fm = FileManager.default
-        let tempDir = fm.temporaryDirectory
-
-        do {
-            // Copy to temp to avoid sandbox issues
-            let tempCopy = tempDir.appendingPathComponent("import_\(UUID().uuidString).\(ext)")
-            try? fm.removeItem(at: tempCopy)
-            try fm.copyItem(at: fileURL, to: tempCopy)
-            defer { try? fm.removeItem(at: tempCopy) }
-
-            let videoExtensions = ["mov", "mp4", "m4v"]
-            let isVideo = videoExtensions.contains(ext)
-
-            var audioURL: URL
-            var videoURL: URL? = nil
-
-            if isVideo {
-                importProgress = "Extracting audio from \(filename) (\(index + 1)/\(total))..."
-                guard let extracted = try await extractAudio(from: tempCopy) else {
-                    print("❌ Failed to extract audio from \(filename)")
-                    return
-                }
-                audioURL = extracted
-                videoURL = tempCopy
-            } else if ext == "m4a" {
-                audioURL = tempCopy
-            } else {
-                importProgress = "Converting \(filename) (\(index + 1)/\(total))..."
-                audioURL = try await audioRecorder.convertToM4A(from: tempCopy)
-            }
-            defer {
-                if audioURL != tempCopy { try? fm.removeItem(at: audioURL) }
-            }
-
-            importProgress = "Transcribing \(filename) (\(index + 1)/\(total))..."
-            let transcript = await transcribeAudio(audioURL: audioURL)
-
-            // Get file creation date for the folder timestamp
-            let resourceValues = try? fileURL.resourceValues(forKeys: [.creationDateKey])
-            let fileDate = resourceValues?.creationDate ?? Date()
-
-            importProgress = "Saving \(filename) (\(index + 1)/\(total))..."
-            saveImportedFile(transcript: transcript, title: filename, audioURL: audioURL, videoURL: videoURL, date: fileDate)
-
-        } catch {
-            print("❌ Import error for \(filename): \(error.localizedDescription)")
-        }
-    }
-
-    private func saveImportedFile(transcript: String, title: String, audioURL: URL, videoURL: URL? = nil, date: Date) {
-        _ = try? storage.withScopedAccess {
-            try self.storage.saveMeeting(
-                transcript: transcript,
-                title: title,
-                notes: "",
-                audioURL: audioURL,
-                videoURL: videoURL
-            )
-        }
-    }
-
-    // MARK: - Retranscribe Existing Recordings
 
     func retranscribe(record: MeetingRecord) async {
-        guard record.hasAudio else {
-            statusMessage = "No audio file to retranscribe"
-            return
-        }
-
-        isRetranscribing = true
-        retranscribeProgress = "Retranscribing \(record.displayTitle)..."
-
-        guard savedFolderURL != nil else {
-            isRetranscribing = false
-            return
-        }
-
-        let audioURL = record.folderURL.appendingPathComponent("audio.m4a")
-
-        let exists = storage.withScopedAccess {
-            FileManager.default.fileExists(atPath: audioURL.path)
-        }
-        guard exists == true else {
-            statusMessage = "Audio file not found"
-            isRetranscribing = false
-            return
-        }
-
-        let newTranscript = await transcribeAudio(audioURL: audioURL)
-
-        // Update transcript.md preserving title and notes
-        _ = storage.withScopedAccess {
-            let transcriptURL = record.folderURL.appendingPathComponent("transcript.md")
-            if let existingContent = try? String(contentsOf: transcriptURL, encoding: .utf8) {
-                let updated = self.replaceTranscriptSection(in: existingContent, with: newTranscript)
-                try? updated.write(to: transcriptURL, atomically: true, encoding: .utf8)
-            } else {
-                try? ("## Transcript\n\n\(newTranscript)").write(to: transcriptURL, atomically: true, encoding: .utf8)
-            }
-        }
-
-        isRetranscribing = false
-        retranscribeProgress = ""
-        loadLibrary()
-        statusMessage = "Retranscription complete"
+        await fileImportService.retranscribe(record: record)
     }
 
     func retranscribeBatch(records: [MeetingRecord]) async {
-        isRetranscribing = true
-        for (i, record) in records.enumerated() {
-            retranscribeProgress = "Retranscribing \(i + 1) of \(records.count): \(record.displayTitle)..."
-            await retranscribe(record: record)
-        }
-        isRetranscribing = false
-        retranscribeProgress = ""
-        statusMessage = "Batch retranscription complete (\(records.count) files)"
-    }
-
-    private func replaceTranscriptSection(in existingContent: String, with newTranscript: String) -> String {
-        let separator = "\n\n---\n\n"
-        let sections = existingContent.components(separatedBy: separator)
-
-        // Find the section that starts with "## Transcript"
-        var headerSections: [String] = []
-        for section in sections {
-            if section.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("## Transcript") {
-                break
-            }
-            headerSections.append(section)
-        }
-
-        if headerSections.isEmpty {
-            return "## Transcript\n\n\(newTranscript)"
-        }
-
-        return headerSections.joined(separator: separator) + separator + "## Transcript\n\n\(newTranscript)"
+        await fileImportService.retranscribeBatch(records: records)
     }
 
     // MARK: - Folder Selection (delegates to StorageManager)
