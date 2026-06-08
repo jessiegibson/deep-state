@@ -82,11 +82,29 @@ struct LLMSettingsView: View {
                         .buttonStyle(NBButtonStyle(color: NBDesign.foreground, textColor: NBDesign.background))
                         Spacer()
                     }
+
+                    // Onboarding reset
+                    Rectangle()
+                        .fill(NBDesign.border)
+                        .frame(height: NBDesign.thinBorder)
+                        .padding(.vertical, NBDesign.smallPadding)
+
+                    VStack(alignment: .leading, spacing: NBDesign.smallPadding) {
+                        Text("ONBOARDING")
+                            .font(NBDesign.captionFont)
+                        Text("Re-run the permission walkthrough on next launch. Useful after adding new permissions like calendar access.")
+                            .font(NBDesign.captionFont)
+                            .foregroundStyle(.secondary)
+                        Button("RESET ONBOARDING") {
+                            UserDefaults.standard.removeObject(forKey: "hasCompletedOnboarding")
+                        }
+                        .buttonStyle(NBButtonStyle(color: NBDesign.background, textColor: NBDesign.foreground))
+                    }
                 }
                 .padding(NBDesign.padding)
             }
         }
-        .frame(width: 520, height: 580)
+        .frame(width: 520, height: 640)
         .background(NBDesign.background)
         .onAppear { loadDraftKeys() }
     }

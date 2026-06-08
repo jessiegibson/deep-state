@@ -1,1 +1,1 @@
-../../MeetingAgent/LLMSettingsView.swift
+../../MeetingAgent/Shared/LLMSettingsView.swift

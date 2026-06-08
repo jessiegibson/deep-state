@@ -95,7 +95,8 @@ There are no tests in this project currently.
 
 - macOS 14.0+ (ScreenCaptureKit requirement)
 - Xcode 15+ / Swift 5.0
-- Bundle ID: `soloai.MeetingAgent`
+- Bundle IDs: macOS `com.soloai.deepState`, iOS `soloai.MeetingAgentiOS`
+- iCloud container: `iCloud.soloai.MeetingAgent` (shared by both targets; intentionally independent of the bundle IDs)
 - App Sandbox enabled with entitlements for: microphone, camera, calendar, file access, network
 
 ## Permissions

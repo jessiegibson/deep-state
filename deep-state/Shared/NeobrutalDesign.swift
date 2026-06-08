@@ -1,1 +1,1 @@
-../../MeetingAgent/NeobrutalDesign.swift
+../../MeetingAgent/Shared/NeobrutalDesign.swift

@@ -1,6 +1,7 @@
 #if os(macOS)
 import SwiftUI
 import Combine
+import EventKit
 
 enum AppView { case record, library }
 
@@ -14,8 +15,14 @@ struct ContentView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header
-            HStack {
+            HStack(spacing: NBDesign.smallPadding) {
+                Image("deep-state-logo")
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: 32, height: 32)
                 Text("deep state Meeting Agent")
+                    .font(.system(size: 16, weight: .bold, design: .monospaced))
+                    .foregroundStyle(NBDesign.background)
                 Spacer()
                 HStack(spacing: 0) {
                     tabButton("RECORD", tab: .record)
@@ -73,6 +80,7 @@ struct ContentView: View {
 
 struct RecordingView: View {
     @ObservedObject var manager: MeetingManager
+    @StateObject private var calendar = CalendarManager.shared
     @State private var isStorageSettingsOpen = false
 
     private var saveLocationLabel: String {
@@ -150,6 +158,11 @@ struct RecordingView: View {
                 StorageSettingsView()
             }
 
+            // Upcoming Calendar Events (hidden while recording or when not authorized)
+            if !manager.isRecording && !manager.isImporting && calendar.authorizationStatus == .granted && !calendar.todayEvents.isEmpty {
+                upcomingEventsPanel
+            }
+
             // Divider
             Rectangle()
                 .fill(NBDesign.border)
@@ -210,6 +223,28 @@ struct RecordingView: View {
             if manager.isRecording && manager.isNotesSheetOpen {
                 inlineNotesPanel
                     .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
+            // Auto-start countdown banner
+            if let countdown = calendar.autoStartCountdown, !manager.isRecording {
+                HStack {
+                    Text("AUTO-STARTING IN \(countdown)s")
+                        .font(NBDesign.captionFont)
+                        .foregroundStyle(NBDesign.background)
+                    Spacer()
+                    Button("CANCEL") {
+                        calendar.disarmAutoStart()
+                    }
+                    .font(NBDesign.captionFont)
+                    .foregroundStyle(NBDesign.background)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .overlay(Rectangle().stroke(NBDesign.background, lineWidth: NBDesign.thinBorder))
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, NBDesign.padding)
+                .padding(.vertical, NBDesign.smallPadding)
+                .background(NBDesign.accent)
             }
 
             // Record Buttons
@@ -277,7 +312,95 @@ struct RecordingView: View {
         .sheet(isPresented: $manager.isSpeakerLabelingOpen) {
             SpeakerLabelingView(manager: manager)
         }
+        .onChange(of: calendar.shouldAutoStart) { _, firing in
+            guard firing, !manager.isRecording else { return }
+            calendar.shouldAutoStart = false
+            Task {
+                await manager.start()
+                if manager.recordingMode == .screenAndAudio {
+                    manager.startMonitoring()
+                }
+            }
+        }
     }
+
+    // MARK: - Upcoming Events Panel
+
+    private var upcomingEventsPanel: some View {
+        VStack(alignment: .leading, spacing: NBDesign.smallPadding) {
+            Text("UPCOMING MEETINGS")
+                .font(NBDesign.captionFont)
+                .foregroundStyle(.secondary)
+
+            VStack(spacing: 4) {
+                ForEach(calendar.todayEvents, id: \.eventIdentifier) { event in
+                    eventRow(event)
+                }
+            }
+        }
+    }
+
+    private func eventRow(_ event: EKEvent) -> some View {
+        let isSelected = calendar.selectedEvent?.eventIdentifier == event.eventIdentifier
+        let isArmed = calendar.armedEventID == event.eventIdentifier
+
+        return HStack(spacing: NBDesign.smallPadding) {
+            // Calendar color dot
+            Circle()
+                .fill(Color(cgColor: event.calendar.cgColor))
+                .frame(width: 8, height: 8)
+
+            // Title + time
+            VStack(alignment: .leading, spacing: 2) {
+                Text(event.title ?? "Untitled")
+                    .font(NBDesign.bodyFont)
+                    .lineLimit(1)
+                Text(formatEventTime(event))
+                    .font(NBDesign.captionFont)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            // Auto-start toggle
+            Button(isArmed ? "ARMED" : "AUTO-START") {
+                if isArmed {
+                    calendar.disarmAutoStart()
+                } else {
+                    calendar.armAutoStart(eventID: event.eventIdentifier)
+                }
+            }
+            .font(NBDesign.captionFont)
+            .foregroundStyle(isArmed ? NBDesign.background : NBDesign.foreground)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(isArmed ? NBDesign.foreground : NBDesign.surface)
+            .overlay(Rectangle().stroke(NBDesign.border, lineWidth: NBDesign.thinBorder))
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, NBDesign.smallPadding)
+        .padding(.vertical, 6)
+        .background(isSelected ? NBDesign.surface : NBDesign.background)
+        .overlay(Rectangle().stroke(isSelected ? NBDesign.foreground : NBDesign.border, lineWidth: isSelected ? 2 : NBDesign.thinBorder))
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if isSelected {
+                calendar.selectedEvent = nil
+                manager.meetingTitle = ""
+            } else {
+                calendar.selectedEvent = event
+                manager.meetingTitle = event.title ?? ""
+            }
+        }
+    }
+
+    private func formatEventTime(_ event: EKEvent) -> String {
+        let fmt = DateFormatter()
+        fmt.timeStyle = .short
+        fmt.dateStyle = .none
+        return fmt.string(from: event.startDate)
+    }
+
+    // MARK: - Notes Panel
 
     private var inlineNotesPanel: some View {
         VStack(spacing: 0) {

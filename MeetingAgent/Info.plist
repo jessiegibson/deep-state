@@ -4,5 +4,7 @@
 <dict>
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>This app records your screen to capture meeting content.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Access your calendar to automatically title recordings and suggest speaker names from attendees.</string>
 </dict>
 </plist>

@@ -1,1 +1,1 @@
-../../MeetingAgent/StorageManager.swift
+../../MeetingAgent/Shared/StorageManager.swift

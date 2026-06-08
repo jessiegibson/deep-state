@@ -1,1 +1,1 @@
-../../MeetingAgent/TranscriptFormatter.swift
+../../MeetingAgent/Shared/TranscriptFormatter.swift

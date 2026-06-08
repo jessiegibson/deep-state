@@ -1,1 +1,1 @@
-../../MeetingAgent/SummaryTemplates.swift
+../../MeetingAgent/Shared/SummaryTemplates.swift

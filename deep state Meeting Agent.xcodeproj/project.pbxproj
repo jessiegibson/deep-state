@@ -7,14 +7,33 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		1134D9168D02127FAABC44F1 /* SummaryTemplateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9BE699DDE809F2A9D50F2D4 /* SummaryTemplateTests.swift */; };
 		11D293012F64DE3B00B76594 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 11D293022F64DE3B00B76594 /* WhisperKit */; };
 		11FE81532F23398500D6AE57 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 11FE81522F23398500D6AE57 /* WhisperKit */; };
 		11FE81552F23398500D6AE57 /* whisperkit-cli in Frameworks */ = {isa = PBXBuildFile; productRef = 11FE81542F23398500D6AE57 /* whisperkit-cli */; };
+		2D71FA4A39CD453FA2F5A412 /* AudioRecorderSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F608AEBE50DF7C39E657B667 /* AudioRecorderSettingsTests.swift */; };
+		44EA9AE71BA087FFE1A3FE49 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9363D7FBC58D8F1B6D6DB500 /* Cocoa.framework */; };
+		B752697C09EF44CF2633E9B9 /* TranscriptFormatterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4023EDE6698552DFBB8072A2 /* TranscriptFormatterTests.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		69EFCD5A1011DEFE39E7DA39 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 11FE813B2F23393D00D6AE57 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 11FE81422F23393D00D6AE57;
+			remoteInfo = "deep state Meeting Agent";
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		11D292EC2F64DE3B00B76594 /* deep-state.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "deep-state.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		11FE81432F23393D00D6AE57 /* deep state Meeting Agent.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "deep state Meeting Agent.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		4023EDE6698552DFBB8072A2 /* TranscriptFormatterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TranscriptFormatterTests.swift; sourceTree = "<group>"; };
+		574A487EF53B10F0B5B41EC6 /* MeetingAgentTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MeetingAgentTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		9363D7FBC58D8F1B6D6DB500 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
+		B9BE699DDE809F2A9D50F2D4 /* SummaryTemplateTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SummaryTemplateTests.swift; sourceTree = "<group>"; };
+		F608AEBE50DF7C39E657B667 /* AudioRecorderSettingsTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AudioRecorderSettingsTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -30,11 +49,15 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		1146A5A22F47FC2A0093F97C /* documentation */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = documentation;
 			sourceTree = "<group>";
 		};
 		11D292ED2F64DE3B00B76594 /* deep-state */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = "deep-state";
 			sourceTree = "<group>";
 		};
@@ -66,9 +89,28 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		191D2B1C3489778E4396BE88 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				44EA9AE71BA087FFE1A3FE49 /* Cocoa.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		05A463B54336B00DCEB0297C /* MeetingAgentTests */ = {
+			isa = PBXGroup;
+			children = (
+				4023EDE6698552DFBB8072A2 /* TranscriptFormatterTests.swift */,
+				B9BE699DDE809F2A9D50F2D4 /* SummaryTemplateTests.swift */,
+				F608AEBE50DF7C39E657B667 /* AudioRecorderSettingsTests.swift */,
+			);
+			name = MeetingAgentTests;
+			path = MeetingAgentTests;
+			sourceTree = "<group>";
+		};
 		11FE813A2F23393D00D6AE57 = {
 			isa = PBXGroup;
 			children = (
@@ -76,6 +118,8 @@
 				11FE81452F23393D00D6AE57 /* MeetingAgent */,
 				11D292ED2F64DE3B00B76594 /* deep-state */,
 				11FE81442F23393D00D6AE57 /* Products */,
+				DF9652419A2AB6F083FD3E0E /* Frameworks */,
+				05A463B54336B00DCEB0297C /* MeetingAgentTests */,
 			);
 			sourceTree = "<group>";
 		};
@@ -84,8 +128,25 @@
 			children = (
 				11FE81432F23393D00D6AE57 /* deep state Meeting Agent.app */,
 				11D292EC2F64DE3B00B76594 /* deep-state.app */,
+				574A487EF53B10F0B5B41EC6 /* MeetingAgentTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		67748E012D23A4F259DBF977 /* OS X */ = {
+			isa = PBXGroup;
+			children = (
+				9363D7FBC58D8F1B6D6DB500 /* Cocoa.framework */,
+			);
+			name = "OS X";
+			sourceTree = "<group>";
+		};
+		DF9652419A2AB6F083FD3E0E /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				67748E012D23A4F259DBF977 /* OS X */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -139,6 +200,24 @@
 			productReference = 11FE81432F23393D00D6AE57 /* deep state Meeting Agent.app */;
 			productType = "com.apple.product-type.application";
 		};
+		30C550CDFBE3B5BC79CA80D2 /* MeetingAgentTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AF81005500F94B9536331C02 /* Build configuration list for PBXNativeTarget "MeetingAgentTests" */;
+			buildPhases = (
+				504D89A9AF1D3CC4A30AF16D /* Sources */,
+				191D2B1C3489778E4396BE88 /* Frameworks */,
+				F592033CB5CC3EA40DF20477 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				82C73ADA77B03937F82DEE3D /* PBXTargetDependency */,
+			);
+			name = MeetingAgentTests;
+			productName = MeetingAgentTests;
+			productReference = 574A487EF53B10F0B5B41EC6 /* MeetingAgentTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -177,6 +256,7 @@
 			targets = (
 				11FE81422F23393D00D6AE57 /* deep state Meeting Agent */,
 				11D292EB2F64DE3B00B76594 /* deep-state */,
+				30C550CDFBE3B5BC79CA80D2 /* MeetingAgentTests */,
 			);
 		};
 /* End PBXProject section */
@@ -190,6 +270,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		11FE81412F23393D00D6AE57 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F592033CB5CC3EA40DF20477 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -213,7 +300,26 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		504D89A9AF1D3CC4A30AF16D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B752697C09EF44CF2633E9B9 /* TranscriptFormatterTests.swift in Sources */,
+				1134D9168D02127FAABC44F1 /* SummaryTemplateTests.swift in Sources */,
+				2D71FA4A39CD453FA2F5A412 /* AudioRecorderSettingsTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		82C73ADA77B03937F82DEE3D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = "deep state Meeting Agent";
+			target = 11FE81422F23393D00D6AE57 /* deep state Meeting Agent */;
+			targetProxy = 69EFCD5A1011DEFE39E7DA39 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		11D292F52F64DE3B00B76594 /* Debug */ = {
@@ -476,7 +582,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = NO;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTED_PLATFORMS = macosx;
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -534,7 +640,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = NO;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTED_PLATFORMS = macosx;
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -544,6 +650,40 @@
 				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
+		};
+		2D64097404E29100FDCF71DB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 472CR4BT3B;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.6;
+				PRODUCT_BUNDLE_IDENTIFIER = com.soloai.deepState.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/deep state Meeting Agent.app/Contents/MacOS/deep state Meeting Agent";
+			};
+			name = Release;
+		};
+		C2AAE65937D8ACB9D8970C41 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 472CR4BT3B;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.6;
+				PRODUCT_BUNDLE_IDENTIFIER = com.soloai.deepState.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/deep state Meeting Agent.app/Contents/MacOS/deep state Meeting Agent";
+			};
+			name = Debug;
 		};
 /* End XCBuildConfiguration section */
 
@@ -574,6 +714,15 @@
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
+		};
+		AF81005500F94B9536331C02 /* Build configuration list for PBXNativeTarget "MeetingAgentTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2D64097404E29100FDCF71DB /* Release */,
+				C2AAE65937D8ACB9D8970C41 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 

@@ -1,1 +1,1 @@
-../../MeetingAgent/SharedModels.swift
+../../MeetingAgent/Shared/SharedModels.swift
