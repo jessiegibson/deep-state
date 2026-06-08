@@ -1,1 +1,1 @@
-../../MeetingAgent/LLMProvider.swift
+../../MeetingAgent/Shared/LLMProvider.swift

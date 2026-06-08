@@ -1,1 +1,1 @@
-../../MeetingAgent/TranscriptViewModel.swift
+../../MeetingAgent/Shared/TranscriptViewModel.swift

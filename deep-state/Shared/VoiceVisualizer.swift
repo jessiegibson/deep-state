@@ -1,1 +1,1 @@
-../../MeetingAgent/VoiceVisualizer.swift
+../../MeetingAgent/Shared/VoiceVisualizer.swift
