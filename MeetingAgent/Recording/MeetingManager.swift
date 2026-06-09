@@ -8,7 +8,6 @@ import Speech
 import UniformTypeIdentifiers
 import EventKit
 
-
 enum RecordingMode: String, CaseIterable {
     case screenAndAudio = "Screen + Audio"
     case audioOnly = "Audio Only"
