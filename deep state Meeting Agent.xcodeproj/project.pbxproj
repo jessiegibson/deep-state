@@ -49,15 +49,11 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		1146A5A22F47FC2A0093F97C /* documentation */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = documentation;
 			sourceTree = "<group>";
 		};
 		11D292ED2F64DE3B00B76594 /* deep-state */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = "deep-state";
 			sourceTree = "<group>";
 		};
@@ -107,7 +103,6 @@
 				B9BE699DDE809F2A9D50F2D4 /* SummaryTemplateTests.swift */,
 				F608AEBE50DF7C39E657B667 /* AudioRecorderSettingsTests.swift */,
 			);
-			name = MeetingAgentTests;
 			path = MeetingAgentTests;
 			sourceTree = "<group>";
 		};
@@ -329,7 +324,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "deep-state/deep-state.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 20260625;
 				DEVELOPMENT_TEAM = 472CR4BT3B;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
@@ -372,7 +367,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "deep-state/deep-state.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 20260625;
 				DEVELOPMENT_TEAM = 472CR4BT3B;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
@@ -545,7 +540,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 20260625;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = MeetingAgent/img;
 				ENABLE_APP_SANDBOX = YES;
@@ -576,7 +571,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 15.00;
+				MACOSX_DEPLOYMENT_TARGET = 15.6;
 				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.soloai.deepState;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -603,7 +598,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 20260625;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = MeetingAgent/img;
 				ENABLE_APP_SANDBOX = YES;
@@ -634,7 +629,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 15.00;
+				MACOSX_DEPLOYMENT_TARGET = 15.6;
 				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.soloai.deepState;
 				PRODUCT_NAME = "$(TARGET_NAME)";

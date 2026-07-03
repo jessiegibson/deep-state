@@ -26,6 +26,10 @@
 	<array>
 		<string>iCloud.soloai.MeetingAgent</string>
 	</array>
+	<!-- Required: on current macOS the Speech/audio-analytics stack hard-crashes a
+	     sandboxed process without this ("PRECONDITION FAILURE: Process is sandboxed
+	     but 'com.apple.security.exception.mach-lookup.global-name' doesn't contain
+	     'com.apple.audioanalyticsd'"). Quote that crash in App Review notes. -->
 	<key>com.apple.security.exception.mach-lookup.global-name</key>
 	<array>
 		<string>com.apple.audioanalyticsd</string>

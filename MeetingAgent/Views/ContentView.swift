@@ -265,14 +265,8 @@ struct RecordingView: View {
                         Task {
                             if manager.isPaused {
                                 await manager.resumeRecording()
-                                if manager.recordingMode == .screenAndAudio {
-                                    manager.startMonitoring()
-                                }
                             } else {
                                 await manager.pauseRecording()
-                                if manager.recordingMode == .screenAndAudio {
-                                    manager.stopMonitoring()
-                                }
                             }
                         }
                     }
@@ -281,9 +275,6 @@ struct RecordingView: View {
                     Button("STOP & SAVE") {
                         Task {
                             await manager.stopAndTranscribe()
-                            if manager.recordingMode == .screenAndAudio {
-                                manager.stopMonitoring()
-                            }
                         }
                     }
                     .buttonStyle(NBButtonStyle(color: NBDesign.accent, textColor: NBDesign.background))
@@ -297,9 +288,6 @@ struct RecordingView: View {
                     Button("START RECORDING") {
                         Task {
                             await manager.start()
-                            if manager.recordingMode == .screenAndAudio {
-                                manager.startMonitoring()
-                            }
                         }
                     }
                     .buttonStyle(NBButtonStyle(color: NBDesign.foreground, textColor: NBDesign.background))
@@ -317,9 +305,6 @@ struct RecordingView: View {
             calendar.shouldAutoStart = false
             Task {
                 await manager.start()
-                if manager.recordingMode == .screenAndAudio {
-                    manager.startMonitoring()
-                }
             }
         }
     }

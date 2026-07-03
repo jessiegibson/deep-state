@@ -1,133 +1,148 @@
 # MeetingAgent Project Status
 
-Snapshot date: 2026-06-05
-Branch reviewed: feature/calendar-integration (HEAD: 6864973)
+Snapshot date: 2026-06-25
+Branch reviewed: refactor/structure (HEAD: 369bee8, plus uncommitted working-tree changes)
+Repo: github.com/jessiegibson/deep-state
+Shipping target this cycle: macOS app (com.soloai.deepState) to TestFlight
 
-## 1. Why two source directories?
+## How to read this file
 
-The Xcode project file is `deep state Meeting Agent.xcodeproj`. It contains two native targets, and the source for each lives in its own folder.
+This is the single source of truth for project state. Update it at the end of any
+work session using the process in the last section. The June 5 version of this file
+was 20 days stale and described a pre-refactor layout that no longer exists. Keeping
+it current is cheaper than reconstructing state from git each time.
 
-deep state Meeting Agent.xcodeproj/
-MeetingAgent/      <- source for the macOS target ("deep state Meeting Agent")
-deep-state/        <- source for the iOS target ("deep-state")
-   iOS/            iOS-only Swift files (IOSContentView, IOSMeetingManager, etc.)
-   Shared/         11 symlinks pointing back at MeetingAgent/*.swift
-   ContentView.swift     dead. Xcode Hello-World template never deleted.
-   deep_stateApp.swift   iOS app entry point
-   deep-state.entitlements
+## 1. Branches
 
-The folder named MeetingAgent is the macOS source root and also the owner of every shared Swift file. The iOS target's Shared/ folder reuses those same files through filesystem symlinks. Editing MeetingAgent/StorageManager.swift simultaneously changes the iOS build because iOS reads it through deep-state/Shared/StorageManager.swift.
+Only two branches exist. The old `feature/calendar-integration` and `feature/ios`
+branches referenced in earlier notes are already merged and gone.
 
-Three names refer to the same product. The Xcode project is "deep state Meeting Agent". The macOS folder is MeetingAgent. The iOS folder is deep-state. This naming drift is the biggest source of confusion and is worth a one-time cleanup, covered in section 5.
+- `main` — last commit 7 weeks ago (c4aa1ab). Pre-refactor. Contains the merged iOS
+  target and the screen-recording fixes. Do not ship from here.
+- `refactor/structure` — current branch, 13 commits ahead of `main`, 0 behind. This
+  is the live line of work and the branch to ship from. Last commit 2 weeks ago,
+  with uncommitted working-tree changes on top (see section 5).
 
-## 2. Targets and bundle identifiers
+## 2. What shipped since the last snapshot
 
-macOS target name: "deep state Meeting Agent". Bundle ID: com.soloai.deepState. SDK: macosx. SUPPORTED_PLATFORMS includes iphoneos and iphonesimulator (stray, should be macosx only).
+The MeetingManager monolith split (previously the top refactor item) is essentially
+done. Commit history on `refactor/structure`:
 
-iOS target name: "deep-state". Bundle ID: soloai.MeetingAgentiOS. SDK: iphoneos. TARGETED_DEVICE_FAMILY 1,2 (iPhone + iPad).
+- Phase 1: low-risk cleanups
+- Phase 2a: extract PermissionsService, remove dead summarization
+- Phase 2b: extract AmbientLevelMonitor
+- Phase 2c: extract WhisperTranscriber
+- Phase 2d: extract ScreenRecorder
+- Phase 2e: extract LiveTranscriber and AudioRecorder
+- Phase 2f: extract FileImportService
+- Phase 3: add MeetingAgentTests target with first unit tests
+- Phase 4: reorganize source into Shared/ + feature folders
 
-iCloud container: iCloud.soloai.MeetingAgent. Declared in both entitlements files. Neither bundle ID matches the container name. That works at runtime as long as the container exists in the developer account, but anyone reading the project will assume a mismatch.
+A test target now exists with four files: AudioRecorderSettingsTests,
+SpeakerClustererTests, SummaryTemplateTests, TranscriptFormatterTests. The earlier
+"zero tests" status no longer holds.
 
-CLAUDE.md states Bundle ID: soloai.MeetingAgent. The actual macOS bundle ID is com.soloai.deepState. The doc is wrong.
+TestFlight prep has also started: ExportOptions.plist (app-store-connect upload,
+team 472CR4BT3B, automatic signing), PrivacyInfo.xcprivacy, and a prior local build/
+directory.
 
-## 3. Source inventory
+## 3. Source layout (current)
 
-macOS-only files (live in MeetingAgent/):
-- MeetingManager.swift, 1,294 LOC. Owns screen capture, audio capture, live transcription, post-hoc WhisperKit transcription, LLM summarization, save logic, calendar pre-fill, diarization integration. Monolith.
-- ContentView.swift, 744 LOC. Header, RecordingView, calendar panel, notes panel, settings sheet wiring.
-- OnboardingView.swift, 251 LOC. 6-step permission walkthrough including new calendar step.
-- SpeakerDiarization.swift, 366 LOC. K-means clustering and voice print store.
-- SpeakerLabelingView.swift, 257 LOC. Post-recording sheet.
-- CalendarManager.swift, 152 LOC. EventKit wrapper with auto-start arming.
-- MeetingManagerApp.swift, 37 LOC. App entry point.
-- cameraPreview.swift, 30 LOC. NSViewRepresentable. Unused.
+The confusing three-name, two-directory layout is mostly resolved on this branch.
+Source now lives under MeetingAgent/ in feature folders:
 
-Shared files (in MeetingAgent/, symlinked into deep-state/Shared/):
-LLMProvider, LLMSettings, LLMSettingsView, NeobrutalDesign, SharedModels, StorageManager, StorageSettingsView, SummaryTemplates, TranscriptFormatter, TranscriptViewModel, VoiceVisualizer.
+- App/            MeetingManagerApp.swift
+- Calendar/       CalendarManager.swift
+- Diarization/    SpeakerDiarization.swift, SpeakerLabelingView.swift
+- Recording/      MeetingManager.swift, AudioRecorder.swift, ScreenRecorder.swift,
+                  LiveTranscriber-related, AmbientLevelMonitor.swift, PermissionsService.swift
+- Transcription/  WhisperTranscriber.swift, LiveTranscriber.swift, FileImportService.swift
+- Shared/         LLMProvider, LLMSettings(+View), NeobrutalDesign, SharedModels,
+                  StorageManager, StorageSettingsView, SummaryTemplates,
+                  TranscriptFormatter, TranscriptViewModel, VoiceVisualizer
+- Views/          ContentView.swift, OnboardingView.swift
 
-iOS-only files (live in deep-state/iOS/):
-IOSMeetingManager (259 LOC), IOSContentView (69 LOC), IOSRecordingView (131 LOC), IOSLibraryView (131 LOC).
+The iOS target source (deep-state/) still exists at repo root and is not the focus
+this cycle.
 
-Total: 5,211 lines of Swift across 23 files. Zero tests. Zero TODO or FIXME markers.
+## 4. TestFlight readiness (macOS target)
 
-## 4. Roadmap status
+Verified ready:
+- Code signing: Automatic, DEVELOPMENT_TEAM 472CR4BT3B set on all configs.
+- Platform: macOS target is SUPPORTED_PLATFORMS = macosx only on both Debug and
+  Release. The old stray iphoneos entry is gone.
+- Usage strings: mic, camera, speech recognition, calendar, and screen capture are
+  all present (some via INFOPLIST_KEY_* build settings merged by GENERATE_INFOPLIST_FILE,
+  some in MeetingAgent/Info.plist).
+- Entitlements: sandbox, audio input, camera, calendars, user-selected files,
+  network client, iCloud (CloudDocuments), and the required audioanalyticsd
+  mach-lookup exception. The audioanalyticsd note should be repeated in App Review notes.
+- PrivacyInfo.xcprivacy present with UserDefaults and FileTimestamp reason codes.
 
-Done in code (verified against git log and current source):
-- 1.1 Audio-only recording mode
-- 1.2 Live transcription in audio-only mode (screen-capture mode still uses post-hoc Whisper)
-- 1.3 Onboarding and permission flow (6 steps)
-- 1.4 Neo-brutalist UI tokens (NBDesign, NBButtonStyle, .nbCard())
-- 2.1 Pause/Resume
-- 2.3 Meeting title with date fallback
-- 2.4 Library view
-- 2.5 Speaker diarization with voice print store and labeling sheet (macOS only)
-- 3.1 AI meeting summaries (LLMProvider with multiple backends, writes Summarization_transcript.md)
-- 3.2 Speaker diarization with naming
-- 3.3 Calendar integration with title pre-fill (just landed on feature/calendar-integration)
-- 4.1 iCloud sync via CloudDocuments
+Fixed today (2026-06-25):
+- Build number bumped from CURRENT_PROJECT_VERSION = 1 to 20260625 across all
+  configs. A build was already uploaded under build 1, so App Store Connect would
+  reject a duplicate. Confirm 20260625 exceeds the last TestFlight build for
+  marketing version 1.1 before uploading.
+- Added ITSAppUsesNonExemptEncryption = NO to Info.plist. The app uses HTTPS only
+  (exempt), so this skips the export-compliance question on every upload.
 
-Not done:
-- 2.2 Transcript editing before save. TranscriptViewModel exists but no in-line edit UI before persisting.
-- 2.5 Language selection. WhisperKit supports it. No settings UI exposes it.
-- 3.4 Full-text search across saved transcripts.
-- 4.2 Export formats (PDF, DOCX, SRT). Transcript is markdown only.
-- 4.3 Menu bar mode (NSStatusItem).
-- 4.4 App Store prep (code signing review, privacy policy, screenshots).
+Still to confirm (cannot be checked from outside Xcode / App Store Connect):
+- Release archive builds and signs clean on the Mac. This is the gating step.
+- The bumped build number is higher than whatever was last uploaded.
+- App Store Connect app record is in TestFlight-ready state with testers assigned.
 
-Phase 5 ideas, all open:
-- 5.1 SQLite FTS5 search index
-- 5.5 Meeting analytics dashboard
-- 5.6 Obsidian export
-- 5.7 Smart chapters via LLM
-- 5.8 Batch re-transcribe
-- 5.9 Webhook integration
-- 5.10 Rust-powered search
+Note on bundle ID vs iCloud container: bundle ID com.soloai.deepState does not match
+container iCloud.soloai.MeetingAgent. This works at runtime as long as the container
+exists in the account, but it reads as a mismatch. Leave as-is for this release;
+track as a cleanup issue.
 
-Open bugs from in-session diagnosis:
-- Audio conversion previously failed because the WAV was written as 32-bit float PCM and AVAssetExportSession rejects it. Fixed on this branch (commit 6864973) by forcing 16-bit int PCM and adding a raw-WAV fallback save.
-- Onboarding never re-runs after the AppStorage flag is set. Fixed on this branch by adding a RESET ONBOARDING button to settings.
-- Header logo was not wired. Fixed on this branch.
+## 5. Uncommitted working-tree changes
 
-## 5. What needs to be refactored
+`refactor/structure` has uncommitted edits to: SpeakerDiarization.swift,
+MeetingAgent.entitlements, AudioRecorder.swift, MeetingManager.swift,
+ScreenRecorder.swift, StorageManager.swift, FileImportService.swift,
+WhisperTranscriber.swift, ContentView.swift, and project.pbxproj. Untracked:
+ExportOptions.plist, PrivacyInfo.xcprivacy, MeetingAgentTests/SpeakerClustererTests.swift,
+.claude/, and (from today) the build-number and Info.plist edits.
 
-These are ordered by payoff per hour of work.
+xcodebuild archives the working tree, so these will be in the build whether or not
+they are committed. Commit them only after a clean local archive verifies they
+compile. Build first, commit second.
 
-1. Split MeetingManager.swift. 1,294 lines in one @MainActor class makes ownership unclear. Suggested split:
-   - AudioRecorder: AVAudioEngine setup, WAV writing, amplitude metering
-   - ScreenRecorder: ScreenCaptureKit setup, pause segments, finalization handshake
-   - LiveTranscriber: SFSpeechRecognizer rotation and analytics accumulation
-   - WhisperTranscriber: WhisperKit setup and post-hoc transcription
-   - SummaryService: LLM provider orchestration
-   - MeetingSession: a coordinator that owns the above and exposes a single @ObservableObject for views
-   Each piece becomes individually testable. Today nothing can be unit tested.
+## 6. Open backlog (track as GitHub issues)
 
-2. Delete deep-state/ContentView.swift. It is the unmodified Xcode template and ships in the iOS binary as dead Swift.
+Features not done:
+- 2.2 Transcript editing before save (TranscriptViewModel exists, no edit UI)
+- 2.5 Language selection (WhisperKit supports it, no settings UI)
+- 3.4 Full-text search across saved transcripts
+- 4.2 Export formats (PDF, DOCX, SRT) — currently markdown only
+- 4.3 Menu bar mode (NSStatusItem)
+- 4.4 App Store prep beyond TestFlight (privacy policy, screenshots, final signing review)
 
-3. Rename folders to match the product. Pick one name. Either rename MeetingAgent/ to macOS/ and deep-state/ to iOS/, or keep MeetingAgent/ and rename deep-state/ to MeetingAgent-iOS/. Update group paths in the pbxproj. This removes the three-name confusion for new contributors.
+Cleanups / tech debt:
+- Reconcile bundle ID com.soloai.deepState vs iCloud container name
+- Reconcile CLAUDE.md (outdated bundle ID, references missing documentation/ files,
+  predates the refactor)
+- Decide on deep-state/ iOS target: bring to parity or formally defer
+- Expand test coverage onto the newly extracted units
 
-4. Reconcile bundle IDs and CLAUDE.md. Decide whether the macOS bundle ID is com.soloai.deepState or soloai.MeetingAgent, then update the other end. The doc currently lies.
+Phase 5 ideas remain open: SQLite FTS5 search, analytics dashboard, Obsidian export,
+smart chapters, batch re-transcribe, webhook integration.
 
-5. Fix the macOS target's SUPPORTED_PLATFORMS. It currently lists "iphoneos iphonesimulator macosx" for the macOS scheme. Should be macosx only. The iOS target is correctly scoped.
+## 7. Update process for this file
 
-6. Promote iOS to feature parity. iOS is missing:
-   - Calendar integration (CalendarManager is macOS-only via #if os(macOS); EventKit works on iOS too)
-   - Speaker diarization (SpeakerDiarization.swift is not symlinked into deep-state/Shared/)
-   - Speaker labeling sheet
-   - LLM summarization wiring inside IOSMeetingManager (the shared LLMProvider is symlinked but iOS may not call it)
-   Either symlink the shared files now, or rewrite the platform-specific bits and ship iOS parity as a feature branch.
+Run this at the end of each work session. Keep it lightweight or it stops happening.
 
-7. Add a test target. Xcode template includes one by default. Target the testable pieces from refactor 1 (AudioRecorder format settings, TranscriptFormatter output, SpeakerDiarization k-means, SummaryTemplates rendering).
+1. Capture what changed:
+   git log --oneline <last-snapshot-commit>..HEAD
+   git status -s
+2. Update sections 1-5 to match reality. Adjust the snapshot date and HEAD line at top.
+3. Move anything finished out of section 6, and add new known issues discovered.
+4. Commit with a clear message:
+   git commit -am "docs: update PROJECT_STATUS to <date>"
+5. For anything that needs discussion, a deadline, or an owner, open a GitHub issue
+   instead of burying it here. This file tracks state. Issues track work.
 
-8. Restore or delete the documentation/ directory. CLAUDE.md references documentation/INFO_PLIST_URGENT.md, documentation/COMPLETE_SUMMARY.md, documentation/TROUBLESHOOTING.md. None exist. Either restore the files or drop the references.
-
-9. Remove unused code. cameraPreview.swift is referenced nowhere outside its own file. Either wire it for the webcam-of-user feature (listed in current_roadmap.md known issues) or delete it.
-
-10. Replace shared-file symlinks with an Xcode group reference. Symlinks work on macOS but break on Windows checkouts and confuse tooling. Cleaner pattern: keep one canonical Shared/ folder at the repo root, add the same Swift files to both targets' membership via Xcode's "Target Membership" panel.
-
-11. Update CLAUDE.md. It still references the documentation/ directory, lists an outdated bundle ID, and predates the calendar integration work. Add a short "Phase 3.3" section consistent with the existing Phase 2.x notes.
-
-## 6. Suggested next branch
-
-Given calendar integration just landed, the highest-leverage next move is the MeetingManager split (refactor 1). Doing it now, before more code accretes around the monolith, costs less than doing it after Phase 3.4 search and Phase 4.x export work add another 500 lines.
-
-If you'd rather keep building features, the smallest user-visible win is 2.2 transcript editing before save: TranscriptViewModel already exists and just needs a sheet UI between transcription complete and saveTranscript. Half a day of work.
+A repeatable command to start step 1 lives in TESTFLIGHT_RUNBOOK.md and the
+status helper script.

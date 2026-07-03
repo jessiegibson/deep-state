@@ -14,6 +14,7 @@ import AVFoundation
 final class ScreenRecorder: NSObject, SCStreamDelegate, SCRecordingOutputDelegate {
     /// Mirrors the user's "record system audio" preference; applied at capture start.
     var captureSystemAudio = false
+    var captureMicrophone = false
 
     /// Surfaced to the owner when the stream stops unexpectedly or the recorder errors.
     var onStreamStopped: ((Error) -> Void)?
@@ -56,6 +57,14 @@ final class ScreenRecorder: NSObject, SCStreamDelegate, SCRecordingOutputDelegat
         config.width = Int(display.width)
         config.height = Int(display.height)
         config.capturesAudio = captureSystemAudio
+        config.captureMicrophone = captureMicrophone
+        if captureSystemAudio {
+            // Apple requires an explicit audio format when capturesAudio is on;
+            // leaving these unset can fail the stream with "invalid parameter".
+            config.sampleRate = 48_000
+            config.channelCount = 2
+            config.excludesCurrentProcessAudio = true
+        }
 
         if FileManager.default.fileExists(atPath: url.path) {
             try? FileManager.default.removeItem(at: url)
@@ -82,11 +91,22 @@ final class ScreenRecorder: NSObject, SCStreamDelegate, SCRecordingOutputDelegat
     /// didFinishRecordingTo:) then stops capture. Safe to call when not capturing.
     func finalizeAndStop() async throws {
         if let s = stream, let ro = recordingOutput {
-            try s.removeRecordingOutput(ro)
-            await withCheckedContinuation { continuation in
-                self.recordingFinishedContinuation = continuation
+            do {
+                try s.removeRecordingOutput(ro)
+                await withCheckedContinuation { continuation in
+                    self.recordingFinishedContinuation = continuation
+                }
+            } catch {
+                print("[ScreenRecorder] removeRecordingOutput failed: \(error)")
             }
-            try await s.stopCapture()
+            // The MOV is finalized once didFinishRecordingTo: has fired. If the stream
+            // already died internally (e.g. an audio pipeline error), stopCapture()
+            // throws — but the recording on disk is still good, so don't propagate.
+            do {
+                try await s.stopCapture()
+            } catch {
+                print("[ScreenRecorder] stopCapture failed after finalization (recording kept): \(error)")
+            }
         }
         stream = nil
         recordingOutput = nil
@@ -142,6 +162,7 @@ final class ScreenRecorder: NSObject, SCStreamDelegate, SCRecordingOutputDelegat
     // MARK: - Delegate Methods
     // CRITICAL: Must be nonisolated because SCKit calls these on a background thread
     nonisolated func stream(_ stream: SCStream, didStopWithError error: Error) {
+        print("DIDSTOPWITH ERROR FIRED")
         Task { @MainActor in
             self.onStreamStopped?(error)
         }

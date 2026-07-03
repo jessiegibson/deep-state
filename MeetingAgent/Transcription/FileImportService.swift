@@ -144,12 +144,12 @@ final class FileImportService {
             return
         }
 
-        let audioURL = record.folderURL.appendingPathComponent("audio.m4a")
-
-        let exists = storage.withScopedAccess {
-            FileManager.default.fileExists(atPath: audioURL.path)
-        }
-        guard exists == true else {
+        // WAV-fallback recordings save audio.wav instead of audio.m4a.
+        let candidates = ["audio.m4a", "audio.wav"].map { record.folderURL.appendingPathComponent($0) }
+        let audioURL = storage.withScopedAccess {
+            candidates.first { FileManager.default.fileExists(atPath: $0.path) }
+        } ?? nil
+        guard let audioURL else {
             onStatus?("Audio file not found")
             onRetranscribingChanged?(false)
             return

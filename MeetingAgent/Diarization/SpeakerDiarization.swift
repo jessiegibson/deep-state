@@ -118,6 +118,11 @@ final class VoiceAnalyticsCollector {
                 timestamp: segment.timestamp,
                 duration:  segment.duration
             )
+            // Analytics frames can contain Inf/NaN (seen with Bluetooth mics);
+            // a single non-finite feature makes k-means++ trap on
+            // Double.random(in: 0..<Inf). Drop such vectors at the source.
+            guard vector.pitch.isFinite, vector.voicing.isFinite,
+                  vector.jitter.isFinite, vector.shimmer.isFinite else { continue }
             if vector.pitch > 0 || vector.voicing > 0 {
                 vectors.append(vector)
             }
@@ -195,11 +200,12 @@ struct SpeakerClusterer {
     private static func kMeansPlusPlusInit(vectors: [VoiceFeatureVector], k: Int) -> [VoiceFeatureVector] {
         var centroids: [VoiceFeatureVector] = [vectors.randomElement()!]
         while centroids.count < k {
-            let distances = vectors.map { v in
-                centroids.map { v.distance(to: $0) }.min() ?? 0
+            let distances = vectors.map { v -> Double in
+                let d = centroids.map { v.distance(to: $0) }.min() ?? 0
+                return d.isFinite ? d : 0
             }
             let total = distances.reduce(0, +)
-            guard total > 0 else { centroids.append(vectors.randomElement()!); continue }
+            guard total > 0, total.isFinite else { centroids.append(vectors.randomElement()!); continue }
             var r = Double.random(in: 0..<total)
             for (i, d) in distances.enumerated() {
                 r -= d
