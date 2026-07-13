@@ -3,10 +3,22 @@ import SwiftUI
 struct IOSRecordingView: View {
     @ObservedObject var manager: IOSMeetingManager
     @State private var isNotesExpanded = false
+    @State private var isStorageSettingsOpen = false
+
+    private var saveLocationLabel: String {
+        let storage = manager.storage
+        if storage.storageMode == .iCloud && storage.iCloudAvailable {
+            return "iCloud / \(storage.iCloudSubfolder)"
+        }
+        return storage.rootURL?.lastPathComponent ?? "No Folder Selected"
+    }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: NBDesign.padding) {
+
+                // Save Location
+                saveLocationCard
 
                 // Status
                 statusCard
@@ -41,9 +53,39 @@ struct IOSRecordingView: View {
             .padding(NBDesign.padding)
         }
         .background(NBDesign.background)
+        .sheet(isPresented: $isStorageSettingsOpen) {
+            StorageSettingsView()
+        }
     }
 
     // MARK: - Subviews
+
+    private var saveLocationCard: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("SAVE TO")
+                .font(NBDesign.captionFont)
+                .foregroundStyle(.secondary)
+
+            HStack {
+                Image(systemName: manager.storage.storageMode == .iCloud ? "icloud.fill" : "folder.fill")
+                    .font(.system(size: 16, weight: .bold))
+                Text(saveLocationLabel)
+                    .font(NBDesign.bodyFont)
+                    .lineLimit(1)
+                Spacer()
+                Button("CHANGE") {
+                    isStorageSettingsOpen = true
+                }
+                .font(NBDesign.captionFont)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .overlay(Rectangle().stroke(NBDesign.border, lineWidth: NBDesign.thinBorder))
+            }
+        }
+        .nbCard()
+        .disabled(manager.isRecording)
+        .opacity(manager.isRecording ? 0.5 : 1.0)
+    }
 
     private var statusCard: some View {
         HStack {

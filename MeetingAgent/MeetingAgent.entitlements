@@ -8,31 +8,15 @@
 	<true/>
 	<key>com.apple.security.device.camera</key>
 	<true/>
-	<key>com.apple.security.personal-information.calendars</key>
-	<true/>
-	<key>com.apple.security.files.user-selected.read-write</key>
-	<true/>
-	<key>com.apple.security.network.client</key>
-	<true/>
-	<key>com.apple.developer.icloud-container-identifiers</key>
-	<array>
-		<string>iCloud.soloai.MeetingAgent</string>
-	</array>
-	<key>com.apple.developer.icloud-services</key>
-	<array>
-		<string>CloudDocuments</string>
-	</array>
-	<key>com.apple.developer.ubiquity-container-identifiers</key>
-	<array>
-		<string>iCloud.soloai.MeetingAgent</string>
-	</array>
-	<!-- Required: on current macOS the Speech/audio-analytics stack hard-crashes a
-	     sandboxed process without this ("PRECONDITION FAILURE: Process is sandboxed
-	     but 'com.apple.security.exception.mach-lookup.global-name' doesn't contain
-	     'com.apple.audioanalyticsd'"). Quote that crash in App Review notes. -->
 	<key>com.apple.security.exception.mach-lookup.global-name</key>
 	<array>
 		<string>com.apple.audioanalyticsd</string>
 	</array>
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<key>com.apple.security.personal-information.calendars</key>
+	<true/>
 </dict>
 </plist>

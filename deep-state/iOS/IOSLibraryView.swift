@@ -21,22 +21,36 @@ struct IOSLibraryView: View {
             } else {
                 List {
                     ForEach(manager.meetingLibrary) { record in
-                        Button {
-                            selectedRecord = record
-                        } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(record.displayTitle)
-                                    .font(NBDesign.bodyFont)
-                                    .foregroundStyle(Color.primary)
-                                Text(record.formattedDate)
-                                    .font(NBDesign.captionFont)
-                                    .foregroundStyle(.secondary)
-                                HStack(spacing: 4) {
-                                    if record.hasAudio { badge("AUDIO") }
-                                    if record.hasVideo { badge("VIDEO") }
+                        HStack {
+                            Button {
+                                selectedRecord = record
+                            } label: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(record.displayTitle)
+                                        .font(NBDesign.bodyFont)
+                                        .foregroundStyle(Color.primary)
+                                    Text(record.formattedDate)
+                                        .font(NBDesign.captionFont)
+                                        .foregroundStyle(.secondary)
+                                    HStack(spacing: 4) {
+                                        if record.hasAudio { badge("AUDIO") }
+                                        if record.hasVideo { badge("VIDEO") }
+                                    }
                                 }
+                                .padding(.vertical, 4)
                             }
-                            .padding(.vertical, 4)
+                            .buttonStyle(.plain)
+
+                            Spacer()
+
+                            if let audioURL = record.audioURL {
+                                ShareLink(item: audioURL) {
+                                    Image(systemName: "square.and.arrow.up")
+                                        .font(.system(size: 15, weight: .bold))
+                                        .foregroundStyle(NBDesign.foreground)
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
                         .listRowBackground(NBDesign.background)
                     }
@@ -71,6 +85,27 @@ struct IOSTranscriptView: View {
         NavigationView {
             ScrollView {
                 VStack(alignment: .leading, spacing: NBDesign.padding) {
+                    // Audio file
+                    if let audioURL = record.audioURL {
+                        HStack {
+                            Image(systemName: "waveform")
+                                .font(.system(size: 16, weight: .bold))
+                            Text(audioURL.lastPathComponent)
+                                .font(NBDesign.bodyFont)
+                                .lineLimit(1)
+                            Spacer()
+                            ShareLink(item: audioURL) {
+                                Text("SHARE")
+                                    .font(NBDesign.captionFont)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 4)
+                                    .overlay(Rectangle().stroke(NBDesign.border, lineWidth: NBDesign.thinBorder))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .nbCard()
+                    }
+
                     // Transcript
                     Text(record.transcriptContent ?? "No transcript available")
                         .font(NBDesign.bodyFont)

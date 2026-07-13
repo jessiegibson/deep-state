@@ -15,6 +15,17 @@ struct MeetingRecord: Identifiable {
 
     var displayTitle: String { title ?? folderName }
 
+    /// Resolves the actual audio file on disk (m4a is the normal path; wav is the
+    /// fallback used when the on-device m4a conversion fails — see StorageManager).
+    var audioURL: URL? {
+        guard hasAudio else { return nil }
+        let m4a = folderURL.appendingPathComponent("audio.m4a")
+        if FileManager.default.fileExists(atPath: m4a.path) { return m4a }
+        let wav = folderURL.appendingPathComponent("audio.wav")
+        if FileManager.default.fileExists(atPath: wav.path) { return wav }
+        return nil
+    }
+
     var formattedDate: String {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMM d, yyyy  h:mm a"

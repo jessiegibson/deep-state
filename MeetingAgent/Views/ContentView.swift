@@ -592,6 +592,16 @@ struct MeetingRecordRow: View {
                         .padding(.vertical, 4)
                         .overlay(Rectangle().stroke(NBDesign.border, lineWidth: NBDesign.thinBorder))
                         .buttonStyle(.plain)
+                    if let audioURL = record.audioURL {
+                        ShareLink(item: audioURL) {
+                            Text("SHARE")
+                                .font(NBDesign.captionFont)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .overlay(Rectangle().stroke(NBDesign.border, lineWidth: NBDesign.thinBorder))
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             }
         }
@@ -657,6 +667,27 @@ struct TranscriptSheetView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: NBDesign.padding) {
+                    // Audio file
+                    if let audioURL = record.audioURL {
+                        HStack {
+                            Image(systemName: "waveform")
+                                .font(.system(size: 16, weight: .bold))
+                            Text(audioURL.lastPathComponent)
+                                .font(NBDesign.bodyFont)
+                                .lineLimit(1)
+                            Spacer()
+                            ShareLink(item: audioURL) {
+                                Text("SHARE")
+                                    .font(NBDesign.captionFont)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 4)
+                                    .overlay(Rectangle().stroke(NBDesign.border, lineWidth: NBDesign.thinBorder))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .nbCard()
+                    }
+
                     // Transcript content
                     Text(record.transcriptContent ?? "No transcript available")
                         .font(NBDesign.bodyFont)
