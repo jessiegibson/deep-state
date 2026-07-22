@@ -127,6 +127,47 @@ struct RecordingView: View {
             }
             .disabled(manager.isRecording || manager.isImporting)
             .opacity(manager.isRecording || manager.isImporting ? 0.5 : 1.0)
+            .task(id: manager.recordingMode) {
+                if manager.recordingMode == .screenAndAudio {
+                    await manager.refreshAvailableDisplays()
+                }
+            }
+
+            // Screen Picker (only shown when there's an actual choice to make)
+            if manager.recordingMode == .screenAndAudio && manager.availableDisplays.count > 1 {
+                VStack(alignment: .leading, spacing: NBDesign.smallPadding) {
+                    Text("SCREEN")
+                        .font(NBDesign.captionFont)
+                        .foregroundStyle(.secondary)
+
+                    HStack(spacing: 0) {
+                        ForEach(manager.availableDisplays) { option in
+                            Button(option.label) {
+                                manager.selectedDisplayID = option.id
+                            }
+                            .font(NBDesign.captionFont)
+                            .foregroundStyle(
+                                manager.selectedDisplayID == option.id
+                                    ? NBDesign.background
+                                    : NBDesign.foreground
+                            )
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(
+                                manager.selectedDisplayID == option.id
+                                    ? NBDesign.foreground
+                                    : NBDesign.surface
+                            )
+                            .overlay(
+                                Rectangle()
+                                    .stroke(NBDesign.border, lineWidth: NBDesign.thinBorder)
+                            )
+                        }
+                    }
+                }
+                .disabled(manager.isRecording || manager.isImporting)
+                .opacity(manager.isRecording || manager.isImporting ? 0.5 : 1.0)
+            }
 
             // Save Location
             VStack(alignment: .leading, spacing: 4) {

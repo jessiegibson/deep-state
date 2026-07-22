@@ -1,5 +1,5 @@
 import XCTest
-@testable import deep_state_Meeting_Agent
+@testable import Deep_State_Meeting_Agent_MacOS
 
 /// Guards the crash fixed on 2026-06-10: voice-analytics frames containing Inf/NaN
 /// (observed with Bluetooth microphones) made the k-means++ distance sum infinite,

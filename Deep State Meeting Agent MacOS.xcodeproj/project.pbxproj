@@ -14,6 +14,7 @@
 		2D71FA4A39CD453FA2F5A412 /* AudioRecorderSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F608AEBE50DF7C39E657B667 /* AudioRecorderSettingsTests.swift */; };
 		44EA9AE71BA087FFE1A3FE49 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9363D7FBC58D8F1B6D6DB500 /* Cocoa.framework */; };
 		B752697C09EF44CF2633E9B9 /* TranscriptFormatterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4023EDE6698552DFBB8072A2 /* TranscriptFormatterTests.swift */; };
+		FCEE8F74A25C3E145C06A375 /* SpeakerClustererTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01D99FE27389008669721BD1 /* SpeakerClustererTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -27,8 +28,9 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		01D99FE27389008669721BD1 /* SpeakerClustererTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpeakerClustererTests.swift; sourceTree = "<group>"; };
 		11D292EC2F64DE3B00B76594 /* deep-state.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "deep-state.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		11FE81432F23393D00D6AE57 /* deep state Meeting Agent.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "deep state Meeting Agent.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		11FE81432F23393D00D6AE57 /* Deep State Meeting Agent MacOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Deep State Meeting Agent MacOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		4023EDE6698552DFBB8072A2 /* TranscriptFormatterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TranscriptFormatterTests.swift; sourceTree = "<group>"; };
 		574A487EF53B10F0B5B41EC6 /* MeetingAgentTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MeetingAgentTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		9363D7FBC58D8F1B6D6DB500 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
@@ -37,30 +39,34 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		11FE815A2F233A7600D6AE57 /* Exceptions for "MeetingAgent" folder in "deep state Meeting Agent" target */ = {
+		11FE815A2F233A7600D6AE57 /* Exceptions for "MeetingAgent" folder in "Deep State Meeting Agent MacOS" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
 			);
-			target = 11FE81422F23393D00D6AE57 /* deep state Meeting Agent */;
+			target = 11FE81422F23393D00D6AE57 /* Deep State Meeting Agent MacOS */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		1146A5A22F47FC2A0093F97C /* documentation */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = documentation;
 			sourceTree = "<group>";
 		};
 		11D292ED2F64DE3B00B76594 /* deep-state */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = "deep-state";
 			sourceTree = "<group>";
 		};
 		11FE81452F23393D00D6AE57 /* MeetingAgent */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				11FE815A2F233A7600D6AE57 /* Exceptions for "MeetingAgent" folder in "deep state Meeting Agent" target */,
+				11FE815A2F233A7600D6AE57 /* Exceptions for "MeetingAgent" folder in "Deep State Meeting Agent MacOS" target */,
 			);
 			path = MeetingAgent;
 			sourceTree = "<group>";
@@ -102,6 +108,7 @@
 				4023EDE6698552DFBB8072A2 /* TranscriptFormatterTests.swift */,
 				B9BE699DDE809F2A9D50F2D4 /* SummaryTemplateTests.swift */,
 				F608AEBE50DF7C39E657B667 /* AudioRecorderSettingsTests.swift */,
+				01D99FE27389008669721BD1 /* SpeakerClustererTests.swift */,
 			);
 			path = MeetingAgentTests;
 			sourceTree = "<group>";
@@ -121,7 +128,7 @@
 		11FE81442F23393D00D6AE57 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				11FE81432F23393D00D6AE57 /* deep state Meeting Agent.app */,
+				11FE81432F23393D00D6AE57 /* Deep State Meeting Agent MacOS.app */,
 				11D292EC2F64DE3B00B76594 /* deep-state.app */,
 				574A487EF53B10F0B5B41EC6 /* MeetingAgentTests.xctest */,
 			);
@@ -170,9 +177,9 @@
 			productReference = 11D292EC2F64DE3B00B76594 /* deep-state.app */;
 			productType = "com.apple.product-type.application";
 		};
-		11FE81422F23393D00D6AE57 /* deep state Meeting Agent */ = {
+		11FE81422F23393D00D6AE57 /* Deep State Meeting Agent MacOS */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 11FE814E2F23393D00D6AE57 /* Build configuration list for PBXNativeTarget "deep state Meeting Agent" */;
+			buildConfigurationList = 11FE814E2F23393D00D6AE57 /* Build configuration list for PBXNativeTarget "Deep State Meeting Agent MacOS" */;
 			buildPhases = (
 				11FE813F2F23393D00D6AE57 /* Sources */,
 				11FE81402F23393D00D6AE57 /* Frameworks */,
@@ -186,13 +193,13 @@
 				1146A5A22F47FC2A0093F97C /* documentation */,
 				11FE81452F23393D00D6AE57 /* MeetingAgent */,
 			);
-			name = "deep state Meeting Agent";
+			name = "Deep State Meeting Agent MacOS";
 			packageProductDependencies = (
 				11FE81522F23398500D6AE57 /* WhisperKit */,
 				11FE81542F23398500D6AE57 /* whisperkit-cli */,
 			);
 			productName = MeetingAgent;
-			productReference = 11FE81432F23393D00D6AE57 /* deep state Meeting Agent.app */;
+			productReference = 11FE81432F23393D00D6AE57 /* Deep State Meeting Agent MacOS.app */;
 			productType = "com.apple.product-type.application";
 		};
 		30C550CDFBE3B5BC79CA80D2 /* MeetingAgentTests */ = {
@@ -232,7 +239,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 11FE813E2F23393D00D6AE57 /* Build configuration list for PBXProject "deep state Meeting Agent" */;
+			buildConfigurationList = 11FE813E2F23393D00D6AE57 /* Build configuration list for PBXProject "Deep State Meeting Agent MacOS" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -249,7 +256,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				11FE81422F23393D00D6AE57 /* deep state Meeting Agent */,
+				11FE81422F23393D00D6AE57 /* Deep State Meeting Agent MacOS */,
 				11D292EB2F64DE3B00B76594 /* deep-state */,
 				30C550CDFBE3B5BC79CA80D2 /* MeetingAgentTests */,
 			);
@@ -302,6 +309,7 @@
 				B752697C09EF44CF2633E9B9 /* TranscriptFormatterTests.swift in Sources */,
 				1134D9168D02127FAABC44F1 /* SummaryTemplateTests.swift in Sources */,
 				2D71FA4A39CD453FA2F5A412 /* AudioRecorderSettingsTests.swift in Sources */,
+				FCEE8F74A25C3E145C06A375 /* SpeakerClustererTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -311,7 +319,7 @@
 		82C73ADA77B03937F82DEE3D /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			name = "deep state Meeting Agent";
-			target = 11FE81422F23393D00D6AE57 /* deep state Meeting Agent */;
+			target = 11FE81422F23393D00D6AE57 /* Deep State Meeting Agent MacOS */;
 			targetProxy = 69EFCD5A1011DEFE39E7DA39 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -561,7 +569,9 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = MeetingAgent/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Deep State Meeting Agent";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Access your calendar to automatically title recordings and suggest speaker names from attendees.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "This app may use the camera for recording.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This app needs microphone access to record audio.";
@@ -619,7 +629,9 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = MeetingAgent/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Deep State Meeting Agent";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Access your calendar to automatically title recordings and suggest speaker names from attendees.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "This app may use the camera for recording.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This app needs microphone access to record audio.";
@@ -631,7 +643,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.6;
 				MARKETING_VERSION = 1.1;
-				PRODUCT_BUNDLE_IDENTIFIER = com.soloai.deepState;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.soloai.meetingAgent-macOS";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = NO;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -659,7 +671,7 @@
 				SDKROOT = macosx;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/deep state Meeting Agent.app/Contents/MacOS/deep state Meeting Agent";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Deep State Meeting Agent MacOS.app/Contents/MacOS/Deep State Meeting Agent MacOS";
 			};
 			name = Release;
 		};
@@ -676,7 +688,7 @@
 				SDKROOT = macosx;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/deep state Meeting Agent.app/Contents/MacOS/deep state Meeting Agent";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Deep State Meeting Agent MacOS.app/Contents/MacOS/Deep State Meeting Agent MacOS";
 			};
 			name = Debug;
 		};
@@ -692,7 +704,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
-		11FE813E2F23393D00D6AE57 /* Build configuration list for PBXProject "deep state Meeting Agent" */ = {
+		11FE813E2F23393D00D6AE57 /* Build configuration list for PBXProject "Deep State Meeting Agent MacOS" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				11FE814C2F23393D00D6AE57 /* Debug */,
@@ -701,7 +713,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
-		11FE814E2F23393D00D6AE57 /* Build configuration list for PBXNativeTarget "deep state Meeting Agent" */ = {
+		11FE814E2F23393D00D6AE57 /* Build configuration list for PBXNativeTarget "Deep State Meeting Agent MacOS" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				11FE814F2F23393D00D6AE57 /* Debug */,

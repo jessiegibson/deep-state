@@ -2,7 +2,7 @@
 //  MeetingManagerApp.swift
 //  MeetingAgent
 //
-//  Created by JAG on 1/23/26.
+//  Created by Jessie Gibson on 1/23/26.
 //
 
 #if os(macOS)

@@ -1,7 +1,18 @@
 #if os(macOS)
 import Foundation
+import AppKit
 import ScreenCaptureKit
 import AVFoundation
+
+/// A display the user can choose to record, with a human-readable label.
+struct DisplayOption: Identifiable, Equatable {
+    let id: CGDirectDisplayID
+    let name: String
+    let width: Int
+    let height: Int
+
+    var label: String { "\(name) · \(width)×\(height)" }
+}
 
 /// Owns the ScreenCaptureKit stream lifecycle: starting capture, the recording-output
 /// finalization handshake, and merging paused segments. Extracted from `MeetingManager`.
@@ -15,6 +26,9 @@ final class ScreenRecorder: NSObject, SCStreamDelegate, SCRecordingOutputDelegat
     /// Mirrors the user's "record system audio" preference; applied at capture start.
     var captureSystemAudio = false
     var captureMicrophone = false
+    /// Display to record, chosen by the user. Falls back to the first available display
+    /// when nil or when the id no longer matches a connected display.
+    var selectedDisplayID: CGDirectDisplayID?
 
     /// Surfaced to the owner when the stream stops unexpectedly or the recorder errors.
     var onStreamStopped: ((Error) -> Void)?
@@ -25,6 +39,27 @@ final class ScreenRecorder: NSObject, SCStreamDelegate, SCRecordingOutputDelegat
     private var recordingFinishedContinuation: CheckedContinuation<Void, Never>?
 
     var isCapturing: Bool { stream != nil }
+
+    /// Lists connected displays as recordable options, labeled with each screen's
+    /// system name (e.g. "Built-in Retina Display") via a match against `NSScreen.screens`.
+    static func availableDisplays() async throws -> [DisplayOption] {
+        let content = try await SCShareableContent.current
+        return content.displays.map { display in
+            let name = NSScreen.screens.first {
+                ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value == display.displayID
+            }?.localizedName ?? "Display"
+            return DisplayOption(id: display.displayID, name: name, width: Int(display.width), height: Int(display.height))
+        }
+    }
+
+    /// The display currently containing the app's key window, if determinable —
+    /// used as the default selection so the picker doesn't default to an arbitrary screen.
+    static func displayContainingKeyWindow(in options: [DisplayOption]) -> CGDirectDisplayID? {
+        guard let screen = NSApp.keyWindow?.screen ?? NSScreen.main,
+              let screenNumber = (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value
+        else { return options.first?.id }
+        return options.first { $0.id == screenNumber }?.id ?? options.first?.id
+    }
 
     /// Begins capturing the main display to `url`.
     func startCapture(to url: URL) async throws {
@@ -43,7 +78,8 @@ final class ScreenRecorder: NSObject, SCStreamDelegate, SCRecordingOutputDelegat
         recordingOutput = nil
 
         let content = try await SCShareableContent.current
-        guard let display = content.displays.first else {
+        guard let display = content.displays.first(where: { $0.displayID == selectedDisplayID })
+            ?? content.displays.first else {
             throw NSError(domain: "ScreenRecorder", code: 2,
                           userInfo: [NSLocalizedDescriptionKey: "No display found"])
         }

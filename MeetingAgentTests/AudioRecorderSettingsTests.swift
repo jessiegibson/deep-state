@@ -1,6 +1,6 @@
 import XCTest
 import AVFoundation
-@testable import deep_state_Meeting_Agent
+@testable import Deep_State_Meeting_Agent_MacOS
 
 /// Guards the regression fixed in commit 6864973: the capture WAV must be written as
 /// 16-bit *integer* PCM. AVAudioEngine input is 32-bit float, but AVAssetExportSession

@@ -24,6 +24,10 @@ class MeetingManager: NSObject, ObservableObject {
     @Published var liveTranscript = "Almost Ready to GOOOOOO"
     @Published var recordingMode: RecordingMode = .audioOnly
 
+    // Screen picker (only relevant in .screenAndAudio mode with multiple displays)
+    @Published var availableDisplays: [DisplayOption] = []
+    @Published var selectedDisplayID: CGDirectDisplayID?
+
     let storage = StorageManager.shared
     /// Convenience accessor — views that read savedFolderURL continue to work.
     var savedFolderURL: URL? { storage.rootURL }
@@ -172,6 +176,22 @@ class MeetingManager: NSObject, ObservableObject {
         }
     }
     
+    // MARK: - Screen Picker
+
+    /// Refreshes the list of connected displays and, if the current selection is unset
+    /// or no longer connected, defaults it to the display containing the app's window.
+    func refreshAvailableDisplays() async {
+        do {
+            let displays = try await ScreenRecorder.availableDisplays()
+            availableDisplays = displays
+            if selectedDisplayID == nil || !displays.contains(where: { $0.id == selectedDisplayID }) {
+                selectedDisplayID = ScreenRecorder.displayContainingKeyWindow(in: displays)
+            }
+        } catch {
+            print("❌ Failed to list displays: \(error)")
+        }
+    }
+
     // MARK: - Recording Logic
     func start() async {
         // Pre-fill title and attendees from the selected calendar event (if any).
@@ -209,6 +229,7 @@ class MeetingManager: NSObject, ObservableObject {
         do {
             screenRecorder.captureSystemAudio = shouldRecordSystemAudio
             screenRecorder.captureMicrophone = shouldRecordMicrophoneAudio
+            screenRecorder.selectedDisplayID = selectedDisplayID
             try await screenRecorder.startCapture(to: url)
             isRecording = true
             statusMessage = "Recording..."
@@ -330,6 +351,7 @@ class MeetingManager: NSObject, ObservableObject {
             do {
                 screenRecorder.captureSystemAudio = shouldRecordSystemAudio
                 screenRecorder.captureMicrophone = shouldRecordMicrophoneAudio
+                screenRecorder.selectedDisplayID = selectedDisplayID
                 try await screenRecorder.startCapture(to: url)
                 isPaused = false
                 statusMessage = "Recording..."
