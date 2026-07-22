@@ -8,7 +8,6 @@ import Speech
 import UniformTypeIdentifiers
 import EventKit
 
-
 enum RecordingMode: String, CaseIterable {
     case screenAndAudio = "Screen + Audio"
     case audioOnly = "Audio Only"
@@ -22,8 +21,12 @@ enum PermissionStatus {
 class MeetingManager: NSObject, ObservableObject {
     @Published var isRecording = false
     @Published var statusMessage = "Ready"
-    @Published var liveTranscript = ""
+    @Published var liveTranscript = "Almost Ready to GOOOOOO"
     @Published var recordingMode: RecordingMode = .audioOnly
+
+    // Screen picker (only relevant in .screenAndAudio mode with multiple displays)
+    @Published var availableDisplays: [DisplayOption] = []
+    @Published var selectedDisplayID: CGDirectDisplayID?
 
     let storage = StorageManager.shared
     /// Convenience accessor — views that read savedFolderURL continue to work.
@@ -33,9 +36,8 @@ class MeetingManager: NSObject, ObservableObject {
     @Published var shouldRecordCamera: Bool = UserDefaults.standard.bool(forKey: "pref_record_camera") {
         didSet { UserDefaults.standard.set(shouldRecordCamera, forKey: "pref_record_camera") }
     }
-    @Published var shouldRecordSystemAudio: Bool = UserDefaults.standard.bool(forKey: "pref_record_audio") {
-        didSet { UserDefaults.standard.set(shouldRecordSystemAudio, forKey: "pref_record_audio") }
-    }
+    @Published var shouldRecordSystemAudio: Bool = true
+    @Published var shouldRecordMicrophoneAudio: Bool = true
 
     // LLM settings accessor (passed to LLMSettingsView). Summarization itself lives
     // in TranscriptViewModel — MeetingManager only exposes the shared settings object.
@@ -174,6 +176,22 @@ class MeetingManager: NSObject, ObservableObject {
         }
     }
     
+    // MARK: - Screen Picker
+
+    /// Refreshes the list of connected displays and, if the current selection is unset
+    /// or no longer connected, defaults it to the display containing the app's window.
+    func refreshAvailableDisplays() async {
+        do {
+            let displays = try await ScreenRecorder.availableDisplays()
+            availableDisplays = displays
+            if selectedDisplayID == nil || !displays.contains(where: { $0.id == selectedDisplayID }) {
+                selectedDisplayID = ScreenRecorder.displayContainingKeyWindow(in: displays)
+            }
+        } catch {
+            print("❌ Failed to list displays: \(error)")
+        }
+    }
+
     // MARK: - Recording Logic
     func start() async {
         // Pre-fill title and attendees from the selected calendar event (if any).
@@ -210,6 +228,8 @@ class MeetingManager: NSObject, ObservableObject {
 
         do {
             screenRecorder.captureSystemAudio = shouldRecordSystemAudio
+            screenRecorder.captureMicrophone = shouldRecordMicrophoneAudio
+            screenRecorder.selectedDisplayID = selectedDisplayID
             try await screenRecorder.startCapture(to: url)
             isRecording = true
             statusMessage = "Recording..."
@@ -253,13 +273,17 @@ class MeetingManager: NSObject, ObservableObject {
             }
 
             statusMessage = "Extracting audio..."
-            guard let audioURL = try await extractAudio(from: videoURL) else {
-                statusMessage = "Failed to extract audio"
-                return
-            }
+            let audioURL = try await extractAudio(from: videoURL)
 
-            statusMessage = "Transcribing with AI..."
-            let transcriptText = await transcribeAudio(audioURL: audioURL)
+            let transcriptText: String
+            if let audioURL {
+                statusMessage = "Transcribing with AI..."
+                transcriptText = await transcribeAudio(audioURL: audioURL)
+            } else {
+                // No audio track in the capture — keep the video instead of
+                // discarding the whole recording.
+                transcriptText = "_No audio was captured with this screen recording._"
+            }
 
             statusMessage = "Saving files..."
             saveTranscript(text: transcriptText, videoURL: videoURL, audioURL: audioURL)
@@ -267,13 +291,15 @@ class MeetingManager: NSObject, ObservableObject {
             // Cleanup segment files and any merged temp file
             for url in recordingSegments { try? FileManager.default.removeItem(at: url) }
             if recordingSegments.count > 1 { try? FileManager.default.removeItem(at: videoURL) }
-            try? FileManager.default.removeItem(at: audioURL)
+            if let audioURL { try? FileManager.default.removeItem(at: audioURL) }
             recordingSegments = []
             isNotesSheetOpen = false
             loadLibrary()
 
         } catch {
-            statusMessage = "Processing failed: \(error.localizedDescription)"
+            let ns = error as NSError
+            statusMessage = "Processing failed: \(error.localizedDescription) [\(ns.domain) \(ns.code)]"
+            print("[MeetingManager] stopAndTranscribe failed: \(ns.domain) \(ns.code) — \(ns)")
             isRecording = false
             isNotesSheetOpen = false
         }
@@ -324,6 +350,8 @@ class MeetingManager: NSObject, ObservableObject {
             self.lastRecordingURL = url
             do {
                 screenRecorder.captureSystemAudio = shouldRecordSystemAudio
+                screenRecorder.captureMicrophone = shouldRecordMicrophoneAudio
+                screenRecorder.selectedDisplayID = selectedDisplayID
                 try await screenRecorder.startCapture(to: url)
                 isPaused = false
                 statusMessage = "Recording..."
@@ -360,9 +388,17 @@ class MeetingManager: NSObject, ObservableObject {
             throw NSError(domain: "MeetingManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to create export session"])
         }
         
-        // Export the audio using the modern async API
-        try await exportSession.export(to: outputURL, as: .m4a)
-        
+        // Export the audio using the modern async API. A failed export shouldn't
+        // abort processing — the caller saves the video without audio instead.
+        do {
+            try await exportSession.export(to: outputURL, as: .m4a)
+        } catch {
+            let ns = error as NSError
+            print("[MeetingManager] Audio extraction export failed: \(ns.domain) \(ns.code) — \(ns)")
+            statusMessage = "Audio extraction failed — saving video only"
+            return nil
+        }
+
         return outputURL
     }
 

@@ -127,6 +127,47 @@ struct RecordingView: View {
             }
             .disabled(manager.isRecording || manager.isImporting)
             .opacity(manager.isRecording || manager.isImporting ? 0.5 : 1.0)
+            .task(id: manager.recordingMode) {
+                if manager.recordingMode == .screenAndAudio {
+                    await manager.refreshAvailableDisplays()
+                }
+            }
+
+            // Screen Picker (only shown when there's an actual choice to make)
+            if manager.recordingMode == .screenAndAudio && manager.availableDisplays.count > 1 {
+                VStack(alignment: .leading, spacing: NBDesign.smallPadding) {
+                    Text("SCREEN")
+                        .font(NBDesign.captionFont)
+                        .foregroundStyle(.secondary)
+
+                    HStack(spacing: 0) {
+                        ForEach(manager.availableDisplays) { option in
+                            Button(option.label) {
+                                manager.selectedDisplayID = option.id
+                            }
+                            .font(NBDesign.captionFont)
+                            .foregroundStyle(
+                                manager.selectedDisplayID == option.id
+                                    ? NBDesign.background
+                                    : NBDesign.foreground
+                            )
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(
+                                manager.selectedDisplayID == option.id
+                                    ? NBDesign.foreground
+                                    : NBDesign.surface
+                            )
+                            .overlay(
+                                Rectangle()
+                                    .stroke(NBDesign.border, lineWidth: NBDesign.thinBorder)
+                            )
+                        }
+                    }
+                }
+                .disabled(manager.isRecording || manager.isImporting)
+                .opacity(manager.isRecording || manager.isImporting ? 0.5 : 1.0)
+            }
 
             // Save Location
             VStack(alignment: .leading, spacing: 4) {
@@ -265,14 +306,8 @@ struct RecordingView: View {
                         Task {
                             if manager.isPaused {
                                 await manager.resumeRecording()
-                                if manager.recordingMode == .screenAndAudio {
-                                    manager.startMonitoring()
-                                }
                             } else {
                                 await manager.pauseRecording()
-                                if manager.recordingMode == .screenAndAudio {
-                                    manager.stopMonitoring()
-                                }
                             }
                         }
                     }
@@ -281,9 +316,6 @@ struct RecordingView: View {
                     Button("STOP & SAVE") {
                         Task {
                             await manager.stopAndTranscribe()
-                            if manager.recordingMode == .screenAndAudio {
-                                manager.stopMonitoring()
-                            }
                         }
                     }
                     .buttonStyle(NBButtonStyle(color: NBDesign.accent, textColor: NBDesign.background))
@@ -297,9 +329,6 @@ struct RecordingView: View {
                     Button("START RECORDING") {
                         Task {
                             await manager.start()
-                            if manager.recordingMode == .screenAndAudio {
-                                manager.startMonitoring()
-                            }
                         }
                     }
                     .buttonStyle(NBButtonStyle(color: NBDesign.foreground, textColor: NBDesign.background))
@@ -317,9 +346,6 @@ struct RecordingView: View {
             calendar.shouldAutoStart = false
             Task {
                 await manager.start()
-                if manager.recordingMode == .screenAndAudio {
-                    manager.startMonitoring()
-                }
             }
         }
     }
@@ -607,6 +633,16 @@ struct MeetingRecordRow: View {
                         .padding(.vertical, 4)
                         .overlay(Rectangle().stroke(NBDesign.border, lineWidth: NBDesign.thinBorder))
                         .buttonStyle(.plain)
+                    if let audioURL = record.audioURL {
+                        ShareLink(item: audioURL) {
+                            Text("SHARE")
+                                .font(NBDesign.captionFont)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .overlay(Rectangle().stroke(NBDesign.border, lineWidth: NBDesign.thinBorder))
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             }
         }
@@ -672,6 +708,27 @@ struct TranscriptSheetView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: NBDesign.padding) {
+                    // Audio file
+                    if let audioURL = record.audioURL {
+                        HStack {
+                            Image(systemName: "waveform")
+                                .font(.system(size: 16, weight: .bold))
+                            Text(audioURL.lastPathComponent)
+                                .font(NBDesign.bodyFont)
+                                .lineLimit(1)
+                            Spacer()
+                            ShareLink(item: audioURL) {
+                                Text("SHARE")
+                                    .font(NBDesign.captionFont)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 4)
+                                    .overlay(Rectangle().stroke(NBDesign.border, lineWidth: NBDesign.thinBorder))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .nbCard()
+                    }
+
                     // Transcript content
                     Text(record.transcriptContent ?? "No transcript available")
                         .font(NBDesign.bodyFont)

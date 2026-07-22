@@ -189,9 +189,11 @@ class StorageManager: ObservableObject {
         let finalText = sections.joined(separator: "\n\n---\n\n") + "\n\n---\n\n## Transcript\n\n\(transcript)"
         try finalText.write(to: meetingFolder.appendingPathComponent("transcript.md"), atomically: true, encoding: .utf8)
 
-        // Copy audio
+        // Copy audio. The WAV-fallback path (M4A conversion failure) hands us a .wav —
+        // keep the real extension so players and retranscribe can open the file.
         if let audioURL = audioURL, FileManager.default.fileExists(atPath: audioURL.path) {
-            try FileManager.default.copyItem(at: audioURL, to: meetingFolder.appendingPathComponent("audio.m4a"))
+            let ext = audioURL.pathExtension.lowercased() == "wav" ? "wav" : "m4a"
+            try FileManager.default.copyItem(at: audioURL, to: meetingFolder.appendingPathComponent("audio.\(ext)"))
         }
 
         // Copy video
@@ -231,6 +233,7 @@ class StorageManager: ObservableObject {
         guard let date = dateFormatter.date(from: folderURL.lastPathComponent) else { return nil }
         let fm = FileManager.default
         let hasAudio = fm.fileExists(atPath: folderURL.appendingPathComponent("audio.m4a").path)
+            || fm.fileExists(atPath: folderURL.appendingPathComponent("audio.wav").path)
         let hasVideo = fm.fileExists(atPath: folderURL.appendingPathComponent("video.mov").path)
 
         let transcriptURL = folderURL.appendingPathComponent("transcript.md")

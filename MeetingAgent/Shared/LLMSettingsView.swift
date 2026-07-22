@@ -104,7 +104,9 @@ struct LLMSettingsView: View {
                 .padding(NBDesign.padding)
             }
         }
+        #if os(macOS)
         .frame(width: 520, height: 640)
+        #endif
         .background(NBDesign.background)
         .onAppear { loadDraftKeys() }
     }
@@ -117,7 +119,7 @@ struct LLMSettingsView: View {
                 .font(NBDesign.captionFont)
                 .foregroundStyle(.secondary)
 
-            HStack(spacing: 0) {
+            FlowLayout(spacing: 0) {
                 ForEach(LLMProviderType.allCases) { provider in
                     Button(provider.rawValue.uppercased()) {
                         binding.wrappedValue = provider
@@ -184,6 +186,54 @@ struct LLMSettingsView: View {
         savedFeedback = "Saved to Keychain"
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
             savedFeedback = nil
+        }
+    }
+}
+
+// MARK: - Flow Layout
+// Wraps subviews onto multiple rows instead of overflowing the container's width.
+
+private struct FlowLayout: Layout {
+    var spacing: CGFloat = 0
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var rowWidth: CGFloat = 0
+        var totalWidth: CGFloat = 0
+        var totalHeight: CGFloat = 0
+        var rowHeight: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if rowWidth > 0, rowWidth + size.width > maxWidth {
+                totalHeight += rowHeight
+                totalWidth = max(totalWidth, rowWidth)
+                rowWidth = 0
+                rowHeight = 0
+            }
+            rowWidth += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
+        totalHeight += rowHeight
+        totalWidth = max(totalWidth, rowWidth)
+        return CGSize(width: maxWidth.isFinite ? maxWidth : totalWidth, height: totalHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX
+        var y = bounds.minY
+        var rowHeight: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > bounds.minX, x + size.width > bounds.maxX {
+                x = bounds.minX
+                y += rowHeight
+                rowHeight = 0
+            }
+            subview.place(at: CGPoint(x: x, y: y), proposal: .unspecified)
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
         }
     }
 }

@@ -22,11 +22,23 @@ final class WhisperTranscriber {
         do {
             // Load WhisperKit once at startup (this can take a few seconds).
             // Note: ensure the model variant matches the Mac's RAM.
-            whisper = try await WhisperKit()
-            return nil
+            let modelName = "openai_whisper-small"
+            let bundleModelFolder = Bundle.main.resourceURL?
+                .appendingPathComponent(modelName)
+                .path()
+            let config = WhisperKitConfig(
+                model:modelName,
+                modelFolder: bundleModelFolder,
+                download: false   // ← crucial: forbids network access
+            )
+            if(config.modelFolder == nil) {
+                whisper = try await WhisperKit(config)
+            }
+            
         } catch {
             return error.localizedDescription
         }
+        return nil
     }
 
     /// Transcribes an audio file. Tries WhisperKit, then Apple Speech.
