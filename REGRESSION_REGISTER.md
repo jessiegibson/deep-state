@@ -18,6 +18,9 @@ Last audited: 2026-08-04, against `main` @ `1493f9d` + uncommitted working tree.
 **Status 2026-08-04 (evening): removing this entitlement BREAKS RECORDING. Confirmed twice,
 five months apart. The app must either carry this entitlement or run unsandboxed.**
 
+**RESTORED in `8583de5`** along with `com.apple.security.app-sandbox`. Verified present in
+the signed Debug binary via `codesign -d --entitlements -`.
+
 Do not remove it again without reading this entry end to end.
 
 Runtime log, 2026-08-04 17:13:53, Debug build of `cf3f580` (the commit that removed it):
@@ -368,13 +371,14 @@ not a Swift error — `try?` cannot catch it, so it terminates the process.
 This is the same A2DP→HFP trigger as **L7**; L7 fixed the *silent-write* half, L15 is the
 *tap-install* half that L7's reinstall path introduced.
 
-**Fix direction** (not yet applied):
-- Pass `format: nil` to `installTap(onBus:bufferSize:format:)` so AVAudioEngine uses the
-  bus's own current format instead of a snapshot that may already be stale, **or** read
-  `inputNode.inputFormat(forBus: 0)` (hardware) rather than `outputFormat` (client).
-- Do not reinstall while the engine is mid-transition; stop the engine, reinstall, restart.
-- Wrap the install in an ObjC exception guard, since a format race here is fatal, not
-  recoverable.
+**Fixed in `e55b2be`:**
+- `installTap()` now passes `format: nil`, so AVAudioEngine reads the bus's own current
+  format at install time instead of a snapshot that may already be stale.
+- `handleConfigurationChange()` stops the engine before removing and reinstalling the tap,
+  so the format cannot move underneath the install, then restarts unless user-paused.
+- Buffer conversion to the WAV's processing format was already handled in the tap closure
+  and is unchanged — the converter is reset so it rebuilds from the new input format.
+- Logs the new sample rate / channel count on every reconfiguration.
 
 **Guard:** QA audio-only recording with a Bluetooth headset connected *and* actively
 switching profiles — this never reproduces on the built-in mic.
