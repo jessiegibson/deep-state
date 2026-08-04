@@ -23,18 +23,22 @@ final class WhisperTranscriber {
             // Load WhisperKit once at startup (this can take a few seconds).
             // Note: ensure the model variant matches the Mac's RAM.
             let modelName = "openai_whisper-small"
-            let bundleModelFolder = Bundle.main.resourceURL?
+            let candidatePath = Bundle.main.resourceURL?
                 .appendingPathComponent(modelName)
                 .path()
-            let config = WhisperKitConfig(
-                model:modelName,
-                modelFolder: bundleModelFolder,
-                download: false   // ← crucial: forbids network access
-            )
-            if(config.modelFolder == nil) {
-                whisper = try await WhisperKit(config)
+            // Only pass modelFolder if it actually exists on disk — WhisperKit uses
+            // it as-is and skips downloading whenever it's non-nil, even if the path
+            // is bogus, so a not-found bundled model must fall through as nil.
+            let bundleModelFolder = candidatePath.flatMap {
+                FileManager.default.fileExists(atPath: $0) ? $0 : nil
             }
-            
+            let config = WhisperKitConfig(
+                model: modelName,
+                modelFolder: bundleModelFolder,
+                download: true   // fetches from Hugging Face and caches locally if not bundled
+            )
+            whisper = try await WhisperKit(config)
+
         } catch {
             return error.localizedDescription
         }
@@ -45,22 +49,22 @@ final class WhisperTranscriber {
     func transcribe(audioURL: URL) async -> String {
         if let whisper = whisper {
             do {
-                print("🎤 Transcribing audio file with WhisperKit...")
+                print("Transcribing audio file with WhisperKit...")
                 onStatus?("Transcribing with AI...")
                 let results = try await whisper.transcribe(audioPath: audioURL.path)
 
                 if let first = results.first, !first.text.isEmpty {
-                    print("✅ WhisperKit transcription successful: \(first.text.count) characters")
+                    print("WhisperKit transcription successful: \(first.text.count) characters")
                     let formatted = TranscriptFormatter.format(segments: first.segments)
                     return formatted.isEmpty ? first.text : formatted
                 } else {
-                    print("⚠️ WhisperKit: No speech detected, trying Apple Speech fallback...")
+                    print("WhisperKit: No speech detected, trying Apple Speech fallback...")
                 }
             } catch {
-                print("❌ WhisperKit error: \(error.localizedDescription), trying Apple Speech fallback...")
+                print("WhisperKit error: \(error.localizedDescription), trying Apple Speech fallback...")
             }
         } else {
-            print("⚠️ WhisperKit not loaded, using Apple Speech fallback...")
+            print("WhisperKit not loaded, using Apple Speech fallback...")
         }
 
         // Fallback: Apple Speech with on-device Neural Engine
@@ -75,7 +79,7 @@ final class WhisperTranscriber {
     /// On-device Neural Engine transcription using Apple's SFSpeechURLRecognitionRequest.
     private func transcribeWithAppleSpeech(audioURL: URL) async -> String? {
         guard let recognizer = speechRecognizer, recognizer.isAvailable else {
-            print("❌ Apple Speech recognizer not available")
+            print("Apple Speech recognizer not available")
             return nil
         }
 
@@ -88,7 +92,7 @@ final class WhisperTranscriber {
                 guard !hasResumed else { return }
 
                 if let error = error {
-                    print("❌ Apple Speech error: \(error.localizedDescription)")
+                    print("Apple Speech error: \(error.localizedDescription)")
                     hasResumed = true
                     continuation.resume(returning: nil)
                     return
@@ -101,7 +105,7 @@ final class WhisperTranscriber {
                     let segments = result.bestTranscription.segments
                     let formatted = TranscriptFormatter.format(sfSegments: segments)
                     let text = formatted.isEmpty ? result.bestTranscription.formattedString : formatted
-                    print("✅ Apple Speech transcription successful: \(text.count) characters")
+                    print("Apple Speech transcription successful: \(text.count) characters")
                     continuation.resume(returning: text.isEmpty ? nil : text)
                 }
             }

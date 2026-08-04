@@ -78,7 +78,8 @@ final class AudioRecorder {
         configChangeObserver = NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.handleConfigurationChange() }
+            guard let self else { return }
+            Task { @MainActor in self.handleConfigurationChange() }
         }
 
         engine.prepare()
