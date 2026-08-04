@@ -69,7 +69,7 @@ final class AudioRecorder {
         self.audioFile = file
         self.wavURL = tempURL
 
-        installTap(format: recordingFormat)
+        installTap()
 
         // Bluetooth headsets renegotiate their profile (A2DP → HFP) when the mic
         // engages, which changes the input hardware format mid-session and kills a
@@ -90,8 +90,15 @@ final class AudioRecorder {
     /// Single tap: write to file + feed recognizer + compute amplitude.
     /// Buffers are converted to the file's processing format when the hardware
     /// format has drifted from the one the WAV was created with.
-    private func installTap(format: AVAudioFormat) {
-        engine?.inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
+    ///
+    /// The tap is always installed with a `nil` format so AVAudioEngine reads the bus's
+    /// own current format at install time. Passing a format we sampled ourselves races
+    /// the Bluetooth A2DP→HFP switch: the hardware can already be at 16 kHz mono while
+    /// `outputFormat(forBus:)` still reports the 44.1 kHz client format. A tap whose
+    /// format disagrees with the bus raises an Objective-C `NSException`, which Swift
+    /// cannot catch — it terminates the process rather than surfacing as a throw.
+    private func installTap() {
+        engine?.inputNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
             guard let self = self, let file = self.audioFile else { return }
 
             let outBuffer: AVAudioPCMBuffer
@@ -159,17 +166,32 @@ final class AudioRecorder {
 
     private func handleConfigurationChange() {
         guard let engine else { return }
+
+        // Stop before re-tapping. Reinstalling on a running engine mid-renegotiation is
+        // what lets the bus format move underneath the install.
+        let wasRunning = engine.isRunning
+        if wasRunning { engine.stop() }
         engine.inputNode.removeTap(onBus: 0)
+
         let newFormat = engine.inputNode.outputFormat(forBus: 0)
         guard newFormat.sampleRate > 0, newFormat.channelCount > 0 else {
             print("[AudioRecorder] Input device went away after configuration change")
             return
         }
+        print("[AudioRecorder] Input reconfigured to \(newFormat.sampleRate) Hz, \(newFormat.channelCount) ch")
+
+        // Drop the converter so the next buffer rebuilds it from the new input format
+        // to the WAV's original processing format.
         converter = nil
-        installTap(format: newFormat)
-        if !isPausedByUser && !engine.isRunning {
+        installTap()
+
+        if !isPausedByUser {
             engine.prepare()
-            try? engine.start()
+            do {
+                try engine.start()
+            } catch {
+                print("[AudioRecorder] Restart after configuration change failed: \(error)")
+            }
         }
     }
 
