@@ -1,7 +1,7 @@
 {
   "images" : [
     {
-      "filename" : "Icon-iOS-Default-512x512@2x.png",
+      "filename" : "Inner Robot Eye 2.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
@@ -13,7 +13,7 @@
           "value" : "dark"
         }
       ],
-      "filename" : "Icon-iOS-Default-512x512@2x 1.png",
+      "filename" : "Inner Robot Eye 1.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
@@ -25,6 +25,7 @@
           "value" : "tinted"
         }
       ],
+      "filename" : "Inner Robot Eye.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"

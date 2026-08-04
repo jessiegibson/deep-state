@@ -16,7 +16,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 0) {
             // Header
             HStack(spacing: NBDesign.smallPadding) {
-                Image("deep-state-logo")
+                Image("Inner Robot Eye 1")
                     .resizable()
                     .interpolation(.high)
                     .frame(width: 32, height: 32)

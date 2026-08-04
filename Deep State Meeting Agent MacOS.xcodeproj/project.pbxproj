@@ -10,9 +10,8 @@
 		1134D9168D02127FAABC44F1 /* SummaryTemplateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9BE699DDE809F2A9D50F2D4 /* SummaryTemplateTests.swift */; };
 		11D293012F64DE3B00B76594 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 11D293022F64DE3B00B76594 /* WhisperKit */; };
 		11FE81532F23398500D6AE57 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 11FE81522F23398500D6AE57 /* WhisperKit */; };
-		11FE81552F23398500D6AE57 /* whisperkit-cli in Frameworks */ = {isa = PBXBuildFile; productRef = 11FE81542F23398500D6AE57 /* whisperkit-cli */; };
+		11FE81552F23398500D6AE57 /* whisperkit-cli in Frameworks */ = {isa = PBXBuildFile; productRef = 11FE81542F23398500D6AE57 /* whisperkit-cli */; settings = {ATTRIBUTES = (Required, ); }; };
 		2D71FA4A39CD453FA2F5A412 /* AudioRecorderSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F608AEBE50DF7C39E657B667 /* AudioRecorderSettingsTests.swift */; };
-		44EA9AE71BA087FFE1A3FE49 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9363D7FBC58D8F1B6D6DB500 /* Cocoa.framework */; };
 		B752697C09EF44CF2633E9B9 /* TranscriptFormatterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4023EDE6698552DFBB8072A2 /* TranscriptFormatterTests.swift */; };
 		FCEE8F74A25C3E145C06A375 /* SpeakerClustererTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01D99FE27389008669721BD1 /* SpeakerClustererTests.swift */; };
 /* End PBXBuildFile section */
@@ -29,11 +28,10 @@
 
 /* Begin PBXFileReference section */
 		01D99FE27389008669721BD1 /* SpeakerClustererTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpeakerClustererTests.swift; sourceTree = "<group>"; };
-		11D292EC2F64DE3B00B76594 /* deep-state.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "deep-state.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		11FE81432F23393D00D6AE57 /* Deep State Meeting Agent MacOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Deep State Meeting Agent MacOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		1136D3B8301CEBBB000F4D4E /* deep-state.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = "deep-state.app"; path = "/Users/jag/workspace/github.com/jessiegibson/MeetingAgent/MeetingAgent/build/Debug-iphoneos/deep-state.app"; sourceTree = "<absolute>"; };
+		11A5CC2C30228B0A00603150 /* Deep State Meeting Agent MacOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = "Deep State Meeting Agent MacOS.app"; path = "/Users/jag/workspace/github.com/jessiegibson/MeetingAgent/MeetingAgent/build/Debug/Deep State Meeting Agent MacOS.app"; sourceTree = "<absolute>"; };
 		4023EDE6698552DFBB8072A2 /* TranscriptFormatterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TranscriptFormatterTests.swift; sourceTree = "<group>"; };
 		574A487EF53B10F0B5B41EC6 /* MeetingAgentTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MeetingAgentTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		9363D7FBC58D8F1B6D6DB500 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
 		B9BE699DDE809F2A9D50F2D4 /* SummaryTemplateTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SummaryTemplateTests.swift; sourceTree = "<group>"; };
 		F608AEBE50DF7C39E657B667 /* AudioRecorderSettingsTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AudioRecorderSettingsTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -49,17 +47,8 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		1146A5A22F47FC2A0093F97C /* documentation */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
-			path = documentation;
-			sourceTree = "<group>";
-		};
 		11D292ED2F64DE3B00B76594 /* deep-state */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = "deep-state";
 			sourceTree = "<group>";
 		};
@@ -95,7 +84,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				44EA9AE71BA087FFE1A3FE49 /* Cocoa.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -116,7 +104,6 @@
 		11FE813A2F23393D00D6AE57 = {
 			isa = PBXGroup;
 			children = (
-				1146A5A22F47FC2A0093F97C /* documentation */,
 				11FE81452F23393D00D6AE57 /* MeetingAgent */,
 				11D292ED2F64DE3B00B76594 /* deep-state */,
 				11FE81442F23393D00D6AE57 /* Products */,
@@ -128,8 +115,6 @@
 		11FE81442F23393D00D6AE57 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				11FE81432F23393D00D6AE57 /* Deep State Meeting Agent MacOS.app */,
-				11D292EC2F64DE3B00B76594 /* deep-state.app */,
 				574A487EF53B10F0B5B41EC6 /* MeetingAgentTests.xctest */,
 			);
 			name = Products;
@@ -138,7 +123,6 @@
 		67748E012D23A4F259DBF977 /* OS X */ = {
 			isa = PBXGroup;
 			children = (
-				9363D7FBC58D8F1B6D6DB500 /* Cocoa.framework */,
 			);
 			name = "OS X";
 			sourceTree = "<group>";
@@ -174,7 +158,7 @@
 				11D293022F64DE3B00B76594 /* WhisperKit */,
 			);
 			productName = "deep-state";
-			productReference = 11D292EC2F64DE3B00B76594 /* deep-state.app */;
+			productReference = 1136D3B8301CEBBB000F4D4E /* deep-state.app */;
 			productType = "com.apple.product-type.application";
 		};
 		11FE81422F23393D00D6AE57 /* Deep State Meeting Agent MacOS */ = {
@@ -190,7 +174,6 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				1146A5A22F47FC2A0093F97C /* documentation */,
 				11FE81452F23393D00D6AE57 /* MeetingAgent */,
 			);
 			name = "Deep State Meeting Agent MacOS";
@@ -199,7 +182,7 @@
 				11FE81542F23398500D6AE57 /* whisperkit-cli */,
 			);
 			productName = MeetingAgent;
-			productReference = 11FE81432F23393D00D6AE57 /* Deep State Meeting Agent MacOS.app */;
+			productReference = 11A5CC2C30228B0A00603150 /* Deep State Meeting Agent MacOS.app */;
 			productType = "com.apple.product-type.application";
 		};
 		30C550CDFBE3B5BC79CA80D2 /* MeetingAgentTests */ = {
@@ -249,7 +232,7 @@
 			mainGroup = 11FE813A2F23393D00D6AE57;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				11FE81512F23398500D6AE57 /* XCRemoteSwiftPackageReference "WhisperKit" */,
+				11FE81512F23398500D6AE57 /* XCRemoteSwiftPackageReference "argmax-oss-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 11FE81442F23393D00D6AE57 /* Products */;
@@ -337,6 +320,7 @@
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Deep State Meeting Agent";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Meeting Agent needs microphone access to record audio.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Meeting Agent uses speech recognition for live transcription.";
@@ -350,7 +334,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 0.8;
 				PRODUCT_BUNDLE_IDENTIFIER = soloai.MeetingAgentiOS;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -380,6 +364,7 @@
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Deep State Meeting Agent";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Meeting Agent needs microphone access to record audio.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Meeting Agent uses speech recognition for live transcription.";
@@ -393,7 +378,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 0.8;
 				PRODUCT_BUNDLE_IDENTIFIER = soloai.MeetingAgentiOS;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -543,6 +528,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = MeetingAgent/MeetingAgent.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
@@ -550,7 +536,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 20260625;
 				DEAD_CODE_STRIPPING = YES;
-				DEVELOPMENT_ASSET_PATHS = MeetingAgent/img;
+				DEVELOPMENT_ASSET_PATHS = MeetingAgent/Assets.xcassets;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_FILE_ACCESS_DOWNLOADS_FOLDER = readwrite;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -582,7 +568,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.6;
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 0.8;
 				PRODUCT_BUNDLE_IDENTIFIER = com.soloai.deepState;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = NO;
@@ -603,6 +589,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = MeetingAgent/MeetingAgent.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
@@ -610,7 +597,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 20260625;
 				DEAD_CODE_STRIPPING = YES;
-				DEVELOPMENT_ASSET_PATHS = MeetingAgent/img;
+				DEVELOPMENT_ASSET_PATHS = MeetingAgent/Assets.xcassets;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_FILE_ACCESS_DOWNLOADS_FOLDER = readwrite;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -642,8 +629,8 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.6;
-				MARKETING_VERSION = 1.1;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.soloai.meetingAgent-macOS";
+				MARKETING_VERSION = 0.8;
+				PRODUCT_BUNDLE_IDENTIFIER = com.soloai.meetingAgentMacOS;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = NO;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -702,7 +689,7 @@
 				11D292F62F64DE3B00B76594 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Debug;
+			defaultConfigurationName = Release;
 		};
 		11FE813E2F23393D00D6AE57 /* Build configuration list for PBXProject "Deep State Meeting Agent MacOS" */ = {
 			isa = XCConfigurationList;
@@ -711,7 +698,7 @@
 				11FE814D2F23393D00D6AE57 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Debug;
+			defaultConfigurationName = Release;
 		};
 		11FE814E2F23393D00D6AE57 /* Build configuration list for PBXNativeTarget "Deep State Meeting Agent MacOS" */ = {
 			isa = XCConfigurationList;
@@ -720,7 +707,7 @@
 				11FE81502F23393D00D6AE57 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Debug;
+			defaultConfigurationName = Release;
 		};
 		AF81005500F94B9536331C02 /* Build configuration list for PBXNativeTarget "MeetingAgentTests" */ = {
 			isa = XCConfigurationList;
@@ -734,12 +721,12 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		11FE81512F23398500D6AE57 /* XCRemoteSwiftPackageReference "WhisperKit" */ = {
+		11FE81512F23398500D6AE57 /* XCRemoteSwiftPackageReference "argmax-oss-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/argmaxinc/WhisperKit.git";
+			repositoryURL = "https://github.com/argmaxinc/argmax-oss-swift.git";
 			requirement = {
-				branch = main;
-				kind = branch;
+				kind = exactVersion;
+				version = 1.0.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
@@ -747,17 +734,17 @@
 /* Begin XCSwiftPackageProductDependency section */
 		11D293022F64DE3B00B76594 /* WhisperKit */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 11FE81512F23398500D6AE57 /* XCRemoteSwiftPackageReference "WhisperKit" */;
+			package = 11FE81512F23398500D6AE57 /* XCRemoteSwiftPackageReference "argmax-oss-swift" */;
 			productName = WhisperKit;
 		};
 		11FE81522F23398500D6AE57 /* WhisperKit */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 11FE81512F23398500D6AE57 /* XCRemoteSwiftPackageReference "WhisperKit" */;
+			package = 11FE81512F23398500D6AE57 /* XCRemoteSwiftPackageReference "argmax-oss-swift" */;
 			productName = WhisperKit;
 		};
 		11FE81542F23398500D6AE57 /* whisperkit-cli */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 11FE81512F23398500D6AE57 /* XCRemoteSwiftPackageReference "WhisperKit" */;
+			package = 11FE81512F23398500D6AE57 /* XCRemoteSwiftPackageReference "argmax-oss-swift" */;
 			productName = "whisperkit-cli";
 		};
 /* End XCSwiftPackageProductDependency section */
