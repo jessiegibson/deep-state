@@ -85,7 +85,7 @@ struct OnboardingView: View {
 
     private var welcomeStep: some View {
         VStack(spacing: 16) {
-            Image("deep-state-logo")
+            Image("Inner Robot Eye 1")
                 .resizable()
                 .scaledToFit()
                 .frame(height: 80)
@@ -93,7 +93,7 @@ struct OnboardingView: View {
             Text("DEEP STATE")
                 .font(.system(size: 28, weight: .black, design: .monospaced))
 
-            Text("Privatly record your audio and video from meetings or notes.")
+            Text("Privately record your audio and video from meetings or notes.")
                 .font(NBDesign.bodyFont)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)

@@ -4,7 +4,6 @@ import ScreenCaptureKit
 import WhisperKit
 import Combine
 import AVFoundation
-import Speech
 import UniformTypeIdentifiers
 import EventKit
 
@@ -56,8 +55,7 @@ class MeetingManager: NSObject, ObservableObject {
     private var lastRecordingURL: URL?
     private let whisperTranscriber = WhisperTranscriber()
 
-    // Live transcription + audio-only capture (extracted helpers)
-    private let liveTranscriber = LiveTranscriber()
+    // Audio-only capture + file import helpers
     private let audioRecorder = AudioRecorder()
     private let fileImportService = FileImportService()
 
@@ -113,20 +111,7 @@ class MeetingManager: NSObject, ObservableObject {
             self?.isRecording = false
         }
 
-        // Live transcript updates surface in the published transcript; rotation continues
-        // only while actively recording.
-        liveTranscriber.onTranscript = { [weak self] text in
-            self?.liveTranscript = text
-        }
-        liveTranscriber.isActive = { [weak self] in
-            guard let self = self else { return false }
-            return self.isRecording && !self.isPaused
-        }
-
-        // Audio-only capture feeds the transcriber and drives the visualizer.
-        audioRecorder.onBuffer = { [weak self] buffer in
-            self?.liveTranscriber.append(buffer)
-        }
+        // Audio-only capture drives the visualizer.
         audioRecorder.onAmplitudes = { [weak self] bars in
             withAnimation(.linear(duration: 0.05)) {
                 self?.amplitudes = bars
@@ -336,9 +321,6 @@ class MeetingManager: NSObject, ObservableObject {
             do {
                 try audioRecorder.resume()
                 isPaused = false
-                // If the recognition task ended while paused (e.g., hit the ~1 min cap),
-                // spin up a new one so live transcription resumes.
-                liveTranscriber.resumeIfStopped(collectAnalytics: true)
                 statusMessage = "Recording (Audio Only)..."
             } catch {
                 statusMessage = "Resume failed: \(error.localizedDescription)"
@@ -475,25 +457,16 @@ class MeetingManager: NSObject, ObservableObject {
             return
         }
 
-        guard liveTranscriber.isRecognizerAvailable else {
-            statusMessage = "Speech recognizer not available"
-            return
-        }
-
         do {
-            // Start a fresh recognition session (resets transcript + analytics) with
-            // analytics collection enabled for speaker diarization, then begin capture.
-            liveTranscriber.startFresh(collectAnalytics: true)
             let wavURL = try audioRecorder.start()
             self.audioOnlyURL = wavURL
 
             isRecording = true
-            liveTranscript = ""
+            liveTranscript = "Transcript will be available after recording stops."
             meetingNotes = ""
             isNotesSheetOpen = true
             statusMessage = "Recording (Audio Only)..."
         } catch {
-            liveTranscriber.cancel()
             statusMessage = "Error: \(error.localizedDescription)"
             print("Audio-only start error: \(error)")
         }
@@ -502,12 +475,7 @@ class MeetingManager: NSObject, ObservableObject {
     private func stopAudioOnly() async {
         statusMessage = "Stopping..."
 
-        // Stop capture (closes the WAV file), then signal end of audio and wait for the
-        // final recognition result — it carries the voice analytics needed for diarization.
         audioRecorder.stop()
-        statusMessage = "Finishing transcription..."
-        await liveTranscriber.endAndAwaitFinal()
-
         isRecording = false
         isPaused = false
         amplitudes = Array(repeating: 0.1, count: 5)
@@ -536,46 +504,8 @@ class MeetingManager: NSObject, ObservableObject {
             return
         }
 
-        // Use live transcript if available, otherwise transcribe with WhisperKit
-        let rawSegments = liveTranscriber.rawTranscriptionSegments
-        let transcriptText: String
-        if !liveTranscript.isEmpty {
-            // Format live transcript segments into paragraphs
-            let formatted = rawSegments.isEmpty
-                ? TranscriptFormatter.formatPlainText(liveTranscript)
-                : TranscriptFormatter.format(sfSegments: rawSegments)
-            transcriptText = formatted.isEmpty ? liveTranscript : formatted
-        } else {
-            statusMessage = "Transcribing with AI..."
-            transcriptText = await transcribeAudio(audioURL: m4aURL)
-        }
-
-        // Run speaker diarization if we captured voice analytics
-        let vectors = liveTranscriber.voiceVectors
-        print("🔊 Diarization check: \(vectors.count) voice vectors, \(rawSegments.count) transcription segments")
-        if !vectors.isEmpty && !rawSegments.isEmpty {
-            statusMessage = "Identifying speakers..."
-            let segments = SpeakerSegmentBuilder.build(
-                from: vectors,
-                transcriptionSegments: rawSegments
-            )
-            // Pre-match against known voice prints
-            speakerSegments = segments.map { seg in
-                var s = seg
-                if let match = VoicePrintStore.shared.match(seg.features) {
-                    s.speakerName = match.name
-                }
-                return s
-            }
-            if speakerSegments.count > 1 {
-                // Store audio URL for saving after labeling
-                self.audioOnlyURL = m4aURL
-                isSpeakerLabelingOpen = true
-                // stopAudioOnly returns here; saving happens in finalizeWithSpeakerLabels()
-                try? FileManager.default.removeItem(at: wavURL)
-                return
-            }
-        }
+        statusMessage = "Transcribing with AI..."
+        let transcriptText = await transcribeAudio(audioURL: m4aURL)
 
         statusMessage = "Saving files..."
         saveTranscript(text: transcriptText, videoURL: nil, audioURL: m4aURL)

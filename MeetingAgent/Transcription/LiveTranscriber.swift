@@ -76,7 +76,7 @@ final class LiveTranscriber {
 
     private func startRotatingTask(collectAnalytics: Bool) {
         guard let recognizer = speechRecognizer, recognizer.isAvailable else {
-            print("❌ Speech recognizer not available for rotation")
+            print("Speech recognizer not available for rotation")
             return
         }
 
@@ -112,7 +112,7 @@ final class LiveTranscriber {
 
             if let error = error {
                 let nsError = error as NSError
-                print("⚠️ Recognition error: \(error.localizedDescription) code=\(nsError.code)")
+                print("Recognition error: \(error.localizedDescription) code=\(nsError.code)")
             }
 
             // Rotate: if the task ended (final or error), spin up a new one so we keep

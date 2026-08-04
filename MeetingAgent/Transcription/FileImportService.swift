@@ -85,7 +85,7 @@ final class FileImportService {
             if isVideo {
                 onImportProgress?("Extracting audio from \(filename) (\(index + 1)/\(total))...")
                 guard let extracted = try await extractAudio?(tempCopy) ?? nil else {
-                    print("❌ Failed to extract audio from \(filename)")
+                    print("Failed to extract audio from \(filename)")
                     return
                 }
                 audioURL = extracted
@@ -112,7 +112,7 @@ final class FileImportService {
             saveImportedFile(transcript: transcript, title: filename, audioURL: audioURL, videoURL: videoURL, date: fileDate)
 
         } catch {
-            print("❌ Import error for \(filename): \(error.localizedDescription)")
+            print("Import error for \(filename): \(error.localizedDescription)")
         }
     }
 

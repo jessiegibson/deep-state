@@ -1,64 +1,54 @@
 {
   "images" : [
     {
-      "filename" : "16x16.jpg",
       "idiom" : "mac",
       "scale" : "1x",
-      "size" : "16x16"
+      "size" : "7x7"
     },
     {
-      "filename" : "16x16@2x.jpg",
       "idiom" : "mac",
       "scale" : "2x",
-      "size" : "16x16"
+      "size" : "7x7"
     },
     {
-      "filename" : "32x32.jpg",
       "idiom" : "mac",
       "scale" : "1x",
-      "size" : "32x32"
+      "size" : "11x11"
     },
     {
-      "filename" : "32x32@2x.jpg",
       "idiom" : "mac",
       "scale" : "2x",
-      "size" : "32x32"
+      "size" : "11x11"
     },
     {
-      "filename" : "128x128.jpg",
       "idiom" : "mac",
       "scale" : "1x",
-      "size" : "128x128"
+      "size" : "24x24"
     },
     {
-      "filename" : "128x128@2x.jpg",
       "idiom" : "mac",
       "scale" : "2x",
-      "size" : "128x128"
+      "size" : "24x24"
     },
     {
-      "filename" : "256x256.jpg",
       "idiom" : "mac",
       "scale" : "1x",
-      "size" : "256x256"
+      "size" : "50x50"
     },
     {
-      "filename" : "256x256@2x.jpg",
       "idiom" : "mac",
       "scale" : "2x",
-      "size" : "256x256"
+      "size" : "50x50"
     },
     {
-      "filename" : "256x256@2x 1.jpg",
       "idiom" : "mac",
       "scale" : "1x",
-      "size" : "512x512"
+      "size" : "100x100"
     },
     {
-      "filename" : "Inner Robot Eye 1.png",
       "idiom" : "mac",
       "scale" : "2x",
-      "size" : "512x512"
+      "size" : "100x100"
     }
   ],
   "info" : {
