@@ -67,16 +67,13 @@ uncommented collateral damage inside an unrelated UI commit.
 
 ---
 
-### L3. iCloud entitlements missing from BOTH targets — ACTIVE REGRESSION
+### L3. iCloud entitlements missing from BOTH targets — FIXED 2026-08-04
 
-Deleted in `e57064e` (2026-07-12) as collateral of L2. **Still missing today.**
-
-`deep-state/deep-state.entitlements` is currently literally:
-```xml
-<plist version="1.0">
-<dict/>
-</plist>
-```
+Deleted in `e57064e` (2026-07-12) as collateral of L2. Missing for 23 days; **restored**
+after it surfaced as a user-visible bug — the onboarding "SAVE TO iCLOUD" button did
+nothing, because `url(forUbiquityContainerIdentifier:)` returns `nil` without the
+entitlement, leaving `rootURL` nil. `deep-state/deep-state.entitlements` had been reduced
+to a literal `<dict/>`.
 
 All three keys are gone from both targets:
 `com.apple.developer.icloud-container-identifiers`,
@@ -90,7 +87,8 @@ They are **not** compensated for in `project.pbxproj` (no iCloud keys there at a
 the ubiquity container will fail at runtime; this does not break the build, so CI and a
 clean compile will not catch it.
 
-**Restore from:** `git show 6b66d6b -- deep-state/deep-state.entitlements`
+**Restored from:** `git show 6b66d6b -- deep-state/deep-state.entitlements`. Verified present
+in the signed binary via `codesign -d --entitlements -`, not just in the plist.
 
 **Guard:** iCloud sync has no automated test. Verify manually — record on one device,
 confirm the folder appears on the other — before any release that claims sync works.
@@ -386,6 +384,30 @@ argument-parser dependencies into the module graph for no benefit. Removed.
 
 **Guard:** the app targets should link `WhisperKit` only. When diarization lands, add
 `SpeakerKit` — never a `*-cli` product.
+
+---
+
+### L18. SwiftUI views must observe `StorageManager`, not reach through the singleton
+
+**Symptom:** in onboarding, picking a local folder left GET STARTED greyed out forever, and
+SAVE TO iCLOUD appeared to do nothing. Both buttons were working — the view just never redrew.
+
+**Cause:** `OnboardingView` declared `@ObservedObject var manager: MeetingManager` but read
+`StorageManager.shared` directly at each use site (10 of them). `StorageManager` is an
+`ObservableObject`, but reading a singleton inside `body` registers **no SwiftUI dependency**,
+so `@Published` changes to `rootURL` and `storageMode` never invalidated the view.
+`.disabled(StorageManager.shared.rootURL == nil)` therefore kept its stale `true`.
+
+**Fix:** hold it as `@ObservedObject private var storage = StorageManager.shared` and go
+through that property.
+
+**Guard:** any view whose state depends on `StorageManager` (or any other shared
+`ObservableObject`) must declare it as a property wrapper. `StorageManager.shared.<x>` inside
+a `body` is the bug signature — grep for it.
+
+**Related:** this masked L3. Even with the fix, the iCloud path stayed broken until the
+entitlements came back, because `rootURL` genuinely was nil. Two independent faults presenting
+as one dead button. The step now shows why iCloud is unavailable instead of failing silently.
 
 ---
 
