@@ -11,6 +11,10 @@ struct IOSContentView: View {
         VStack(spacing: 0) {
             // Header
             HStack {
+                Image("AppIcon")
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: 32, height: 32)
                 Text("Meeting Agent")
                     .font(NBDesign.headlineFont)
                 Spacer()

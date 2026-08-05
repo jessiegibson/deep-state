@@ -89,7 +89,7 @@ struct OnboardingView: View {
 
     private var welcomeStep: some View {
         VStack(spacing: 16) {
-            Image("Inner Robot Eye 1")
+            Image("deepStateRobot01")
                 .resizable()
                 .scaledToFit()
                 .frame(height: 80)
