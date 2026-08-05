@@ -349,6 +349,46 @@ its own imageset.
 
 ---
 
+### L17. `'WhisperKit' is missing a dependency on 'ArgmaxCore'`
+
+```
+'WhisperKit' is missing a dependency on 'ArgmaxCore' because dependency scan of
+Swift module 'WhisperKit' discovered a dependency on 'ArgmaxCore'
+```
+
+**This is not a missing dependency you can add.** `ArgmaxCore` is an internal *target* of
+`argmax-oss-swift`, not a published *product*. The package vends only `ArgmaxOSS`,
+`WhisperKit`, `TTSKit`, `SpeakerKit`, `argmax-cli`, and `whisperkit-cli` — there is no
+`ArgmaxCore` product to select in Xcode's package picker. SPM resolves it transitively;
+a healthy build log shows `➜ Explicit dependency on target 'ArgmaxCore' in project
+'argmax-oss-swift'`.
+
+The message comes from Xcode's **explicit modules** dependency scanner
+(`SWIFT_ENABLE_EXPLICIT_MODULES = YES`, on by default). It generally means a stale module
+cache or package-graph state in the IDE, not a project misconfiguration — clean
+command-line builds of both targets pass with the same project file.
+
+**Fix order — cheapest first:**
+1. Xcode → File → Packages → **Reset Package Caches**, then Product → **Clean Build Folder**.
+2. Quit Xcode, delete the project's `DerivedData` folder, reopen.
+3. If DerivedData was deleted while Xcode was closed, package resolution can come back
+   corrupted (`DecodingError.dataCorrupted … not valid JSON`). Repair with:
+   ```bash
+   xcodebuild -resolvePackageDependencies -project "Deep State Meeting Agent MacOS.xcodeproj" -scheme "deep state Meeting Agent"
+   ```
+4. Only if it survives all of the above is it a real graph problem.
+
+**Related misconfiguration, fixed 2026-08-04.** The macOS app target linked `whisperkit-cli`
+— an **executable** product — alongside `WhisperKit`. Nothing in the source imports it
+(`ArgmaxCLI`/`WhisperKitCLI` appear nowhere), and the iOS target correctly linked only
+`WhisperKit`. Linking an executable product into an app target pulls `ArgmaxCLI` and its
+argument-parser dependencies into the module graph for no benefit. Removed.
+
+**Guard:** the app targets should link `WhisperKit` only. When diarization lands, add
+`SpeakerKit` — never a `*-cli` product.
+
+---
+
 ## Part 2 — Chronological changelog
 
 47 commits, 2026-01-27 → 2026-07-23. `▲` marks a commit that introduced a regression.

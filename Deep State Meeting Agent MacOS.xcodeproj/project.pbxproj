@@ -10,7 +10,6 @@
 		1134D9168D02127FAABC44F1 /* SummaryTemplateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9BE699DDE809F2A9D50F2D4 /* SummaryTemplateTests.swift */; };
 		11D293012F64DE3B00B76594 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 11D293022F64DE3B00B76594 /* WhisperKit */; };
 		11FE81532F23398500D6AE57 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 11FE81522F23398500D6AE57 /* WhisperKit */; };
-		11FE81552F23398500D6AE57 /* whisperkit-cli in Frameworks */ = {isa = PBXBuildFile; productRef = 11FE81542F23398500D6AE57 /* whisperkit-cli */; settings = {ATTRIBUTES = (Required, ); }; };
 		2D71FA4A39CD453FA2F5A412 /* AudioRecorderSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F608AEBE50DF7C39E657B667 /* AudioRecorderSettingsTests.swift */; };
 		B752697C09EF44CF2633E9B9 /* TranscriptFormatterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4023EDE6698552DFBB8072A2 /* TranscriptFormatterTests.swift */; };
 /* End PBXBuildFile section */
@@ -74,7 +73,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				11FE81532F23398500D6AE57 /* WhisperKit in Frameworks */,
-				11FE81552F23398500D6AE57 /* whisperkit-cli in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -178,7 +176,6 @@
 			name = "Deep State Meeting Agent MacOS";
 			packageProductDependencies = (
 				11FE81522F23398500D6AE57 /* WhisperKit */,
-				11FE81542F23398500D6AE57 /* whisperkit-cli */,
 			);
 			productName = MeetingAgent;
 			productReference = 11A5CC453022909800603150 /* Deep State Meeting Agent MacOS.app */;
@@ -737,11 +734,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 11FE81512F23398500D6AE57 /* XCRemoteSwiftPackageReference "argmax-oss-swift" */;
 			productName = WhisperKit;
-		};
-		11FE81542F23398500D6AE57 /* whisperkit-cli */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 11FE81512F23398500D6AE57 /* XCRemoteSwiftPackageReference "argmax-oss-swift" */;
-			productName = "whisperkit-cli";
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
