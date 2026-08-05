@@ -20,7 +20,6 @@ enum PermissionStatus {
 class MeetingManager: NSObject, ObservableObject {
     @Published var isRecording = false
     @Published var statusMessage = "Ready"
-    @Published var liveTranscript = "Almost Ready to GOOOOOO"
     @Published var recordingMode: RecordingMode = .audioOnly
 
     // Screen picker (only relevant in .screenAndAudio mode with multiple displays)
@@ -59,8 +58,7 @@ class MeetingManager: NSObject, ObservableObject {
     private let audioRecorder = AudioRecorder()
     private let fileImportService = FileImportService()
 
-    // Audio file to save once recording stops (WAV, then reassigned to the M4A used
-    // for the speaker-labeling handoff in finalizeWithSpeakerLabels).
+    // Audio file to save once recording stops (WAV, then reassigned to the M4A).
     private var audioOnlyURL: URL?
 
     // Voice Visualizer Properties
@@ -73,10 +71,6 @@ class MeetingManager: NSObject, ObservableObject {
     @Published var meetingLibrary: [MeetingRecord] = []
     private var recordingSegments: [URL] = []
     private var segmentCounter = 0
-
-    // Speaker diarization (voice analytics + raw segments live in LiveTranscriber)
-    @Published var speakerSegments: [SpeakerSegment] = []
-    @Published var isSpeakerLabelingOpen = false
 
     func checkPermissions() {
         if let message = PermissionsService.requestStartupPermissions() {
@@ -462,7 +456,6 @@ class MeetingManager: NSObject, ObservableObject {
             self.audioOnlyURL = wavURL
 
             isRecording = true
-            liveTranscript = "Transcript will be available after recording stops."
             meetingNotes = ""
             isNotesSheetOpen = true
             statusMessage = "Recording (Audio Only)..."
@@ -491,14 +484,14 @@ class MeetingManager: NSObject, ObservableObject {
         do {
             m4aURL = try await audioRecorder.convertToM4A(from: wavURL)
         } catch {
-            // Conversion failed. Don't lose the recording. Save the WAV instead
-            // and use whatever transcript exists (live transcript or empty).
+            // Conversion failed. Don't lose the recording — save the WAV instead.
             print("[MeetingManager] M4A conversion failed: \(error)")
             statusMessage = "Saving raw audio (M4A conversion failed)..."
-            let fallbackText = liveTranscript.isEmpty
-                ? "_Transcript unavailable. Audio saved as WAV._"
-                : liveTranscript
-            saveTranscript(text: fallbackText, videoURL: nil, audioURL: wavURL)
+            saveTranscript(
+                text: "_Transcript unavailable. Audio saved as WAV._",
+                videoURL: nil,
+                audioURL: wavURL
+            )
             try? FileManager.default.removeItem(at: wavURL)
             statusMessage = "Saved (WAV, no M4A)"
             return
@@ -532,47 +525,6 @@ class MeetingManager: NSObject, ObservableObject {
     func speechRecognitionPermissionStatus() -> PermissionStatus { PermissionsService.speechRecognitionStatus() }
 
     func requestSpeechRecognitionPermission() async -> Bool { await PermissionsService.requestSpeechRecognition() }
-
-    // MARK: - Speaker Diarization
-
-    /// Called by SpeakerLabelingView when user finishes naming speakers
-    func finalizeWithSpeakerLabels(_ labeledSegments: [SpeakerSegment]) {
-        let transcriptText = buildDiarizedTranscript(from: labeledSegments)
-
-        // Update voice prints for named speakers
-        for segment in labeledSegments {
-            guard let name = segment.speakerName else { continue }
-            VoicePrintStore.shared.upsert(name: name, features: segment.features)
-        }
-
-        statusMessage = "Saving files..."
-        saveTranscript(text: transcriptText, videoURL: nil, audioURL: audioOnlyURL)
-
-        if let m4a = audioOnlyURL { try? FileManager.default.removeItem(at: m4a) }
-        audioOnlyURL = nil
-        speakerSegments = []
-        isSpeakerLabelingOpen = false
-        isNotesSheetOpen = false
-        statusMessage = "Saved successfully"
-    }
-
-    func cancelSpeakerLabeling() {
-        // Save without speaker labels using plain transcript
-        saveTranscript(text: liveTranscript, videoURL: nil, audioURL: audioOnlyURL)
-        if let m4a = audioOnlyURL { try? FileManager.default.removeItem(at: m4a) }
-        audioOnlyURL = nil
-        speakerSegments = []
-        isSpeakerLabelingOpen = false
-        isNotesSheetOpen = false
-        statusMessage = "Saved successfully"
-    }
-
-    private func buildDiarizedTranscript(from segments: [SpeakerSegment]) -> String {
-        guard !segments.isEmpty else { return liveTranscript }
-        return segments.map { seg in
-            "**\(seg.displayName):** \(seg.text)"
-        }.joined(separator: "\n\n")
-    }
 
 }
 

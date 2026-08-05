@@ -221,16 +221,6 @@ struct RecordingView: View {
                             .foregroundStyle(manager.isPaused ? Color.secondary : NBDesign.accent)
                     }
 
-                    if manager.recordingMode == .audioOnly && !manager.liveTranscript.isEmpty {
-                        ScrollView {
-                            Text(manager.liveTranscript)
-                                .font(NBDesign.bodyFont)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .frame(maxHeight: 60)
-                        .nbCard()
-                    }
-
                     VoiceVisualizer(amplitudes: manager.amplitudes)
                 }
                 .transition(.opacity)
@@ -338,9 +328,6 @@ struct RecordingView: View {
             }
         }
         .padding(NBDesign.padding)
-        .sheet(isPresented: $manager.isSpeakerLabelingOpen) {
-            SpeakerLabelingView(manager: manager)
-        }
         .onChange(of: calendar.shouldAutoStart) { _, firing in
             guard firing, !manager.isRecording else { return }
             calendar.shouldAutoStart = false

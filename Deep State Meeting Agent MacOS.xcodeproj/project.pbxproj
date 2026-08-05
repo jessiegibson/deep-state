@@ -13,7 +13,6 @@
 		11FE81552F23398500D6AE57 /* whisperkit-cli in Frameworks */ = {isa = PBXBuildFile; productRef = 11FE81542F23398500D6AE57 /* whisperkit-cli */; settings = {ATTRIBUTES = (Required, ); }; };
 		2D71FA4A39CD453FA2F5A412 /* AudioRecorderSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F608AEBE50DF7C39E657B667 /* AudioRecorderSettingsTests.swift */; };
 		B752697C09EF44CF2633E9B9 /* TranscriptFormatterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4023EDE6698552DFBB8072A2 /* TranscriptFormatterTests.swift */; };
-		FCEE8F74A25C3E145C06A375 /* SpeakerClustererTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01D99FE27389008669721BD1 /* SpeakerClustererTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -27,9 +26,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		01D99FE27389008669721BD1 /* SpeakerClustererTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpeakerClustererTests.swift; sourceTree = "<group>"; };
-		1136D3B8301CEBBB000F4D4E /* deep-state.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = "deep-state.app"; path = "/Users/jag/workspace/github.com/jessiegibson/MeetingAgent/MeetingAgent/build/Debug-iphoneos/deep-state.app"; sourceTree = "<absolute>"; };
-		11A5CC2C30228B0A00603150 /* Deep State Meeting Agent MacOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = "Deep State Meeting Agent MacOS.app"; path = "/Users/jag/workspace/github.com/jessiegibson/MeetingAgent/MeetingAgent/build/Debug/Deep State Meeting Agent MacOS.app"; sourceTree = "<absolute>"; };
+		11A5CC453022909800603150 /* Deep State Meeting Agent MacOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Deep State Meeting Agent MacOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		11A5CC463022909800603150 /* deep-state.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "deep-state.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		4023EDE6698552DFBB8072A2 /* TranscriptFormatterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TranscriptFormatterTests.swift; sourceTree = "<group>"; };
 		574A487EF53B10F0B5B41EC6 /* MeetingAgentTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MeetingAgentTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B9BE699DDE809F2A9D50F2D4 /* SummaryTemplateTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SummaryTemplateTests.swift; sourceTree = "<group>"; };
@@ -96,7 +94,6 @@
 				4023EDE6698552DFBB8072A2 /* TranscriptFormatterTests.swift */,
 				B9BE699DDE809F2A9D50F2D4 /* SummaryTemplateTests.swift */,
 				F608AEBE50DF7C39E657B667 /* AudioRecorderSettingsTests.swift */,
-				01D99FE27389008669721BD1 /* SpeakerClustererTests.swift */,
 			);
 			path = MeetingAgentTests;
 			sourceTree = "<group>";
@@ -116,6 +113,8 @@
 			isa = PBXGroup;
 			children = (
 				574A487EF53B10F0B5B41EC6 /* MeetingAgentTests.xctest */,
+				11A5CC453022909800603150 /* Deep State Meeting Agent MacOS.app */,
+				11A5CC463022909800603150 /* deep-state.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -158,7 +157,7 @@
 				11D293022F64DE3B00B76594 /* WhisperKit */,
 			);
 			productName = "deep-state";
-			productReference = 1136D3B8301CEBBB000F4D4E /* deep-state.app */;
+			productReference = 11A5CC463022909800603150 /* deep-state.app */;
 			productType = "com.apple.product-type.application";
 		};
 		11FE81422F23393D00D6AE57 /* Deep State Meeting Agent MacOS */ = {
@@ -182,7 +181,7 @@
 				11FE81542F23398500D6AE57 /* whisperkit-cli */,
 			);
 			productName = MeetingAgent;
-			productReference = 11A5CC2C30228B0A00603150 /* Deep State Meeting Agent MacOS.app */;
+			productReference = 11A5CC453022909800603150 /* Deep State Meeting Agent MacOS.app */;
 			productType = "com.apple.product-type.application";
 		};
 		30C550CDFBE3B5BC79CA80D2 /* MeetingAgentTests */ = {
@@ -292,7 +291,6 @@
 				B752697C09EF44CF2633E9B9 /* TranscriptFormatterTests.swift in Sources */,
 				1134D9168D02127FAABC44F1 /* SummaryTemplateTests.swift in Sources */,
 				2D71FA4A39CD453FA2F5A412 /* AudioRecorderSettingsTests.swift in Sources */,
-				FCEE8F74A25C3E145C06A375 /* SpeakerClustererTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -233,7 +233,16 @@ Always branch new work from the newest feature branch, not an older one.
 
 ---
 
-### L13. Speaker diarization plumbing
+### L13. Speaker diarization plumbing — REMOVED 2026-08-04, see the deferral note below
+
+> **Deferred.** Speaker diarization and macOS live transcription were removed on 2026-08-04
+> to get to a working app. `SpeakerDiarization.swift`, `SpeakerLabelingView.swift`,
+> `LiveTranscriber.swift`, and `SpeakerClustererTests.swift` are deleted; restore point is
+> the parent of that commit. The `SFVoiceAnalytics` + k-means approach below is **retired**,
+> not paused — diarization will be rebuilt on Argmax SpeakerKit (see Part 4). The entry stays
+> because the two silent-failure modes it documents are the kind a rewrite can reintroduce.
+
+
 
 Two independent silent failures fixed in `6344464` (2026-03-11):
 
@@ -403,6 +412,38 @@ its own imageset.
 | `1493f9d` | 07-23 | README |
 | uncommitted | 07-21 | **Removed** audioanalyticsd + `app-sandbox` keys (L1) |
 | — | 08-04 | Removal runtime-verified; **L1 settled — entitlement stays out** |
+
+---
+
+## Part 4 — Planned: diarization via Argmax SpeakerKit
+
+Replacement for the retired `SFVoiceAnalytics` + k-means path (L13). Not started — this is a
+decision record so the evaluation is not redone from scratch.
+
+**Package.** As of May 2026 Argmax merged WhisperKit into a single package,
+[`argmax-oss-swift`](https://github.com/argmaxinc/argmax-oss-swift), shipping WhisperKit +
+SpeakerKit (pyannote diarization) + TTSKit together.
+
+**Why this one.** The project already depends on `argmaxinc/WhisperKit` tracking `main`. Same
+vendor, same repo, same SPM manifest going forward — adding diarization is closer to enabling
+a product than vetting and integrating a new third-party library.
+
+**Model.** pyannote-v4 (community-1): segmentation + embedding + clustering as one CoreML
+pipeline, on Apple Silicon / ANE.
+
+**Platform floor.** macOS 13.0+ / iOS 16.0+ — both under this project's existing macOS 14+
+floor, so no deployment-target change.
+
+**Licensing.** SDK is MIT/Apache-2.0. The underlying pyannote weights are **CC-BY-4.0**, which
+requires attribution — a credits or About-screen line. Not a blocker for commercial use, but
+it is a shipping requirement, so budget the UI for it.
+
+**Open gap.** No published DER/EER numbers for SpeakerKit specifically — Argmax has not put out
+a benchmarks doc the way FluidAudio has. **Spike required**: measure directly against real
+meeting audio before committing. Do not assume parity with published pyannote numbers.
+
+**Sequencing.** Ship a working app first. Then: dependency swap → measurement spike → wire
+diarization → rebuild the labeling UI.
 
 ---
 
