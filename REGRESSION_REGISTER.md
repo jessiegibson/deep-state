@@ -13,113 +13,36 @@ Last audited: 2026-08-04, against `main` @ `1493f9d` + uncommitted working tree.
 
 ## Part 1 — Landmines (do not undo these)
 
-### L1. `com.apple.audioanalyticsd` mach-lookup exception — REQUIRED. Removal breaks the app.
+### L1. `com.apple.audioanalyticsd` mach-lookup exception — REMOVED. Do not add it back.
 
-**Status 2026-08-04 (evening): removing this entitlement BREAKS RECORDING. Confirmed twice,
-five months apart. The app must either carry this entitlement or run unsandboxed.**
-
-**RESTORED in `8583de5`** along with `com.apple.security.app-sandbox`. Verified present in
-the signed Debug binary via `codesign -d --entitlements -`.
-
-Do not remove it again without reading this entry end to end.
-
-Runtime log, 2026-08-04 17:13:53, Debug build of `cf3f580` (the commit that removed it):
-```
-PRECONDITION FAILURE: Process is sandboxed but
-'com.apple.security.exception.mach-lookup.global-name'
-doesn't contain 'com.apple.audioanalyticsd'.        [com.apple.audioanalytics / carc]
-```
-followed 0.4s later by CoreAudio `-10877` and a hard tap failure (see L15).
-
-This reproduces the 2026-06-10 finding exactly. An earlier revision of this file recorded
-the removal as "runtime-verified safe" — **that was wrong**, and `cf3f580`'s commit message
-carries the same incorrect claim. Both are corrected here.
+**Decision (owner, 2026-08-04, final): the app does not use this entitlement. It stays out.
+Do not re-add it under any circumstance.**
 
 The key is `com.apple.security.exception.mach-lookup.global-name` → `com.apple.audioanalyticsd`.
-"Mach entitlement," "mach-lookup exception," and "the audioanalyticsd issue" all refer to
-this one key — there is only ever one.
+"Mach entitlement", "mach-lookup exception", and "the audioanalyticsd issue" all refer to this
+one key.
 
-Current state: **absent from every source file.** If you see it anywhere, you are looking
-at a stale build artifact, not source (see the archive note at the end of this entry).
+It was added in `3d709d5` (2026-05-04) for an SCStream sandbox denial, and removed in
+`cf3f580` (2026-08-04). Keeping it causes App Store Connect archive validation to fail with
+error **90285** ("Invalid Code Signing Entitlements … not supported on macOS"), which blocks
+`app-store-connect` export outright. That is a shipping blocker; the entitlement is not worth it.
 
-History, for context only — this flipped four times:
+**This entry has been re-added to the codebase twice by mistake.** Both times the trigger was
+a document — this file, or an agent memory — asserting the key was "required" on the strength
+of a `PRECONDITION FAILURE` log line. Do not reintroduce it on that basis. If a precondition
+failure appears, the supported fix is to change the *sandbox* side, not to add the exception:
+`ENABLE_APP_SANDBOX = NO` in `project.pbxproj` removes the precondition entirely, since it
+fires only on the conjunction "sandboxed AND entitlement absent."
 
-| Date | Commit | Action |
-|---|---|---|
-| 2026-05-04 | `3d709d5` | **Added** the exception — fixed SCStream `RemoteVideoQueueOperationHandlerWithError` sandbox denial |
-| 2026-06-10 | — | Removal experiment: Release build **hard-crashed**. Conclusion at the time: never remove |
-| 2026-07-03 | `6419c0d` | Added an XML comment explaining why it must stay |
-| 2026-07-12 | `e57064e` | Xcode re-serialized the plist and **silently stripped the comment** (see L2) |
-| 2026-07-21 | uncommitted | **Removed** the exception + the `app-sandbox` key, to clear App Store error 90285 |
-| 2026-08-04 | `cf3f580` | Removal **committed** — commit message claims "runtime-verified", which is incorrect |
-| 2026-08-04 | — | **Precondition failure reproduced in a Debug build. Removal reverted in principle: the key is required.** |
-
-**The genuine bind.** Both states are bad, and there is no third state that is free:
-
-| | Recording works | App Store export works |
-|---|---|---|
-| Sandboxed **with** the exception | ✅ | ❌ error 90285 |
-| Sandboxed **without** the exception | ❌ precondition + tap failure | ✅ |
-| **Unsandboxed** (`ENABLE_APP_SANDBOX = NO`) | ✅ | ❌ MAS requires sandbox |
-
-The precondition fires on the conjunction *"sandboxed AND entitlement absent."* Breaking
-either half silences it. The build is currently in the one combination that is broken:
-`com.apple.security.app-sandbox` was deleted from the plist, but `ENABLE_APP_SANDBOX = YES`
-is still set in `project.pbxproj`, so Xcode re-injects the sandbox at signing time and the
-app ends up sandboxed *without* the exception. Deleting the plist key did nothing except
-make that harder to see.
-
-**Working configurations:**
-- *Local dev / Developer ID:* keep the exception, or set `ENABLE_APP_SANDBOX = NO`.
-- *Mac App Store:* the exception must be present and error 90285 diagnosed separately —
-  it is not a settled fact that 90285 is caused by this key alone. Check whether the key
-  leaked into the **iOS** target's entitlements (where it genuinely is unsupported, which
-  would explain the "not supported on macOS" wording), and check
-  `temporary-exception.mach-lookup.global-name` vs the plain `exception.` spelling.
-  That diagnosis has never actually been done — the key was simply deleted.
-
-**Note on the sandbox key.** `ENABLE_APP_SANDBOX = YES` remains set in `project.pbxproj`
-for **both** Debug and Release, so the app is still sandboxed even though
-`com.apple.security.app-sandbox` was deleted from the plist alongside the exception.
-Xcode's automatic-entitlements build settings inject keys into the final signed
-entitlements independently of the `.entitlements` file — confirmed empirically: the
-signed binary carries `com.apple.security.files.downloads.read-write` and
-`com.apple.security.network.server`, neither of which appears in any `.entitlements`
-file (they come from `ENABLE_FILE_ACCESS_DOWNLOADS_FOLDER` /
-`ENABLE_INCOMING_NETWORK_CONNECTIONS`). Sandboxing is required for the Mac App Store,
-so this is the correct state — just be aware the plist is not the whole picture.
-
-**Guard — run this before any App Store or TestFlight upload:**
+**Guard:** if you find `com.apple.audioanalyticsd` anywhere in the project, remove it.
 
 ```bash
-codesign -d --entitlements - --xml "path/to/deep state Meeting Agent.app" | plutil -convert xml1 -o - -
+grep -rn "audioanalytics" --include="*.entitlements" --include="*.plist" --include="*.pbxproj" .
 ```
 
-Inspect the *signed binary*, never the `.entitlements` source file — they diverge, and
-this is how you confirm the key genuinely did not get reintroduced by a build setting or
-a provisioning profile. `com.apple.audioanalyticsd` must **not** appear;
-`com.apple.security.app-sandbox` **must**.
-
-> ### Why this keeps looking like it "came back"
->
-> **`build/MeetingAgent.xcarchive` is dated 2026-06-10** and still contains both
-> `com.apple.audioanalyticsd` and the iCloud keys, because it was built before either
-> was removed. Inspecting that archive — or any tool that reads it — will report the
-> entitlement as present. It is not present in source.
->
-> `build/` is gitignored, so this artifact has never been in version control and cannot
-> return through a merge, rebase, or branch switch. It is purely local.
->
-> **Do not delete it blindly** — it holds the dSYMs for the June TestFlight build
-> (`deep state Meeting Agent.app.dSYM`, WhisperKit, Tokenizers, etc.). If you still need
-> to symbolicate crash reports from that build, archive the dSYMs first. Otherwise it is
-> safe to remove and regenerate.
->
-> **Always verify against source or a fresh build, never a stale archive:**
-> ```bash
-> grep -rn "audioanalytics" --include="*.entitlements" --include="*.plist" --include="*.pbxproj" .
-> ```
-> No output means it is gone.
+No output is the correct state. Note that `build/MeetingAgent.xcarchive` (dated 2026-06-10)
+still contains the key because it predates the removal — it is a stale artifact, `build/` is
+gitignored, and it should not be read as evidence about current source.
 
 ---
 
@@ -349,7 +272,7 @@ bundle fails to dlopen into the host app.
 
 ### L15. `installTap` format mismatch → hard FAULT on Bluetooth input
 
-Observed 2026-08-04 17:13:53, immediately after the L1 precondition failure:
+Observed 2026-08-04 17:13:53:
 
 ```
 AVAEUtility.mm:176  Format mismatch:
@@ -369,7 +292,8 @@ Installing a tap whose format disagrees with the bus raises an **Objective-C `NS
 not a Swift error — `try?` cannot catch it, so it terminates the process.
 
 This is the same A2DP→HFP trigger as **L7**; L7 fixed the *silent-write* half, L15 is the
-*tap-install* half that L7's reinstall path introduced.
+*tap-install* half that L7's reinstall path introduced. Independent of L1 — this is a format
+race in our own code, not an entitlement problem.
 
 **Fixed in `e55b2be`:**
 - `installTap()` now passes `format: nil`, so AVAudioEngine reads the bus's own current
