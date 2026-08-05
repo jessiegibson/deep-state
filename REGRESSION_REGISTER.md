@@ -316,7 +316,7 @@ switching profiles — this never reproduces on the built-in mic.
 
 ---
 
-### L16. `Image("Inner Robot Eye 1")` — appiconset members are not named images
+### L16. `Image("Inner Robot Eye 1")` — appiconset members are not named images — FIXED 2026-08-04
 
 ```
 No image named 'Inner Robot Eye 1' found in asset catalog   [SwiftUI / Invalid Configuration]
@@ -338,12 +338,28 @@ and its member files are not individually addressable — not by `Image(_:)`, no
 **Affected:** `ContentView.swift:19` (32×32 header logo) and `OnboardingView.swift:88`
 (80pt welcome-screen logo). Cosmetic only — SwiftUI renders an empty placeholder.
 
-**Fix:** create `Assets.xcassets/Inner Robot Eye 1.imageset/` with a `Contents.json`
-pointing at the PNG (source art is in `MeetingAgent/img/`). No code change needed.
-Downscale first — the source is ~1 MB at roughly 1024², for slots rendered at 32pt/80pt.
+**Fixed:** added `Assets.xcassets/Inner Robot Eye 1.imageset/` with a universal 1x/2x
+`Contents.json`. No code change — both call sites resolve as written. The source art was
+1024² / ~1.06 MB for slots rendered at 32pt and 80pt (max real need: 160px @2x), so the
+slots are 128px and 256px — **108 KB total, a 90% reduction**.
+
+`MeetingAgent/` is a `PBXFileSystemSynchronizedRootGroup`, so a new `.imageset` folder on
+disk is picked up with **no pbxproj edit** — unlike `MeetingAgentTests/`, which uses classic
+file references (see L13's removal note).
+
+**Verified in the compiled catalog, not just by a green build** — a missing image is a
+runtime failure, so building proves nothing:
+```bash
+xcrun assetutil --info "<built>.app/Contents/Resources/Assets.car"
+```
+`Inner Robot Eye 1` now appears alongside `AppIcon`.
 
 **Guard:** an app icon is never a general-purpose image. If a view needs the logo, it needs
-its own imageset.
+its own imageset. Verify with `assetutil`, not by compiling.
+
+**Left over:** `MeetingAgent/img/` holds `Inner Robot Eye.png`, `Inner Robot Eye 1.png`, and
+`Inner Robot Eye 2.png` — byte-identical 1024² duplicates (md5 `c360d7bc…`), ~3.2 MB for one
+image. `img/` is a `DEVELOPMENT_ASSET_PATHS` source folder, not shipped, but worth pruning.
 
 ---
 
