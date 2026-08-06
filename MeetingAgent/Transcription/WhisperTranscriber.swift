@@ -54,9 +54,17 @@ final class WhisperTranscriber {
                 let results = try await whisper.transcribe(audioPath: audioURL.path)
 
                 if let first = results.first, !first.text.isEmpty {
-                    print("WhisperKit transcription successful: \(first.text.count) characters")
+                    // Never return `first.text` raw — it still carries the model's
+                    // special tokens (<|startoftranscript|>, <|0.00|>, [BLANK_AUDIO], …).
                     let formatted = TranscriptFormatter.format(segments: first.segments)
-                    return formatted.isEmpty ? first.text : formatted
+                    let text = formatted.isEmpty
+                        ? TranscriptFormatter.cleanSegmentText(first.text)
+                        : formatted
+                    if !text.isEmpty {
+                        print("WhisperKit transcription successful: \(text.count) characters")
+                        return text
+                    }
+                    print("WhisperKit: audio contained no speech, trying Apple Speech fallback...")
                 } else {
                     print("WhisperKit: No speech detected, trying Apple Speech fallback...")
                 }
@@ -73,6 +81,12 @@ final class WhisperTranscriber {
             return appleSpeechResult
         }
 
+        // Both engines ran and neither found speech. If WhisperKit was loaded and
+        // returned cleanly, the audio really is silent — say so plainly rather than
+        // claiming the transcriber is broken.
+        if whisper != nil {
+            return "_No speech was detected in this recording._"
+        }
         return "Transcription failed - both WhisperKit and Apple Speech unavailable"
     }
 

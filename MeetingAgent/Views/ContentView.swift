@@ -302,13 +302,15 @@ struct RecordingView: View {
                         }
                     }
                     .buttonStyle(NBButtonStyle(color: NBDesign.surface, textColor: NBDesign.foreground))
+                    .disabled(manager.isStopping)
 
-                    Button("STOP & SAVE") {
+                    Button(manager.isStopping ? "SAVING…" : "STOP & SAVE") {
                         Task {
                             await manager.stopAndTranscribe()
                         }
                     }
                     .buttonStyle(NBButtonStyle(color: NBDesign.accent, textColor: NBDesign.background))
+                    .disabled(manager.isStopping)
                 } else {
                     Button("IMPORT") {
                         Task { await manager.importFiles() }

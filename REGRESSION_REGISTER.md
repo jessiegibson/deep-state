@@ -116,20 +116,64 @@ record, check this **first**.
 
 ---
 
-### L5. `SCRecordingOutput` does not finalize on `stopCapture()`
+### L5. `SCRecordingOutput` finalization handshake
 
-Fixed in `ef8f034` (2026-03-11).
+Original fix `ef8f034` (2026-03-11). **Substantially corrected 2026-08-05 — the original
+fix was based on two wrong premises and never actually worked. Read this whole entry.**
 
-**Symptom:** saved `video.mov` unreadable, "cannot open" error.
-**Cause:** the moov atom is unwritten when `stopCapture()` returns.
-**Fix:** call `removeRecordingOutput()` **before** `stopCapture()`, then `await` the
-`didFinishRecordingTo:` delegate via `CheckedContinuation` before touching the file.
+**Symptom:** saved `video.mov` unreadable, "cannot open" error
+(`AVFoundationErrorDomain -11829`, `NSOSStatusErrorDomain -12848`); later, also
+`SCStreamErrorInvalidParameter` (-3812) on every Stop & Save.
+**Cause:** the moov atom is not written synchronously when `stopCapture()` returns.
+
+The original fix called `removeRecordingOutput()` before `stopCapture()` and awaited a
+`recordingOutput(_:didFinishRecordingTo:)` delegate. **Both halves were wrong:**
+
+1. **`recordingOutput(_:didFinishRecordingTo:)` is not a real delegate method.** The
+   entire `SCRecordingOutputDelegate` protocol (see `SCRecordingOutput.h`) is:
+   `recordingOutputDidStartRecording(_:)`, `recordingOutputDidFinishRecording(_:)`
+   (**no URL argument**), and `recordingOutput(_:didFailWithError:)`. All are
+   `@optional`, so the misspelled signature compiled cleanly and **simply never fired**.
+   Verified with `responds(to: Selector("recordingOutput:didFinishRecordingTo:"))`
+   → `false`. The awaited continuation could therefore never be resumed; the code only
+   avoided hanging because `removeRecordingOutput()` threw first and skipped the await.
+2. **`removeRecordingOutput()` is unnecessary.** `SCStream.h` on `removeRecordingOutput`:
+   *"If stopCapture is called without removing recordingOutput, recording will be
+   stopped and finish writing into the file."* `stopCapture()` alone finalizes. Calling
+   `removeRecordingOutput()` first is redundant and throws -3812 once the recording
+   output has already finished.
+
+**Correct flow** (in `ScreenRecorder.finalizeAndStop()`): call `stopCapture()`, then
+await `recordingOutputDidFinishRecording(_:)` / `didFailWithError:` — with a 15s timeout
+and a `didFinishRecording` flag so a delegate that fires *before* the await, or never
+arrives, can't wedge the stop flow. Tolerate -3808 from `stopCapture()` and keep waiting.
 Applies to **both** stop and pause flows.
 
-**Rule:** never access an `SCRecordingOutput` file until `didFinishRecordingTo:` has fired.
+**Rule:** never access an `SCRecordingOutput` file until
+`recordingOutputDidFinishRecording(_:)` has fired. Never call `removeRecordingOutput()`.
 
-Later refinement (2026-06-10): `finalizeAndStop()` must **not** discard an
+**Guard:** `SCRecordingOutputDelegate` methods are `@optional` — a wrong signature is a
+silent no-op, not a compile error. If you touch these, verify against the SDK header
+(`$(xcrun --sdk macosx --show-sdk-path)/System/Library/Frameworks/ScreenCaptureKit.framework/Headers/SCRecordingOutput.h`)
+or assert with `responds(to:)`. Do not trust that it compiles.
+
+Earlier refinement (2026-06-10, still valid): `finalizeAndStop()` must **not** discard an
 already-finalized MOV when `stopCapture()` throws.
+
+---
+
+### L5b. Stop & Save is re-entrant
+
+Fixed 2026-08-05.
+
+**Symptom:** `stopAndTranscribe failed` logged **twice** for one recording, with two
+different AVFoundation errors (`assetProperty_Tracks` and `Duration`).
+**Cause:** `stopAndTranscribe()` clears `isRecording` only *after* `finalizeAndStop()`
+returns, so the STOP & SAVE button stayed live through the whole finalization await. A
+second click ran a concurrent stop against the same stream, and the two racing calls
+overwrote each other's finalization continuation.
+**Fix:** `isStopping` guard in `MeetingManager.stopAndTranscribe()` plus
+`.disabled(manager.isStopping)` on the STOP/PAUSE buttons.
 
 ---
 
@@ -192,6 +236,72 @@ device (system audio + mic). In a sandboxed app, HAL daemon communication fails
 Second half of the same commit: `SCStream` was created with `delegate: nil`, so internal
 stream errors were **silently swallowed**. Now passes `self` as `SCStreamDelegate` so
 `didStopWithError` surfaces to the UI. **Do not pass `nil` again.**
+
+**Reintroduced** by the `ScreenRecorder.swift` extraction (`6419c0d`, Phase 4 reorg) and
+fixed again 2026-08-05: the refactor re-added a `captureMicrophone` var wired to
+`shouldRecordMicrophoneAudio` (default `true`, no UI toggle ever bound to it), so every
+screen recording silently hit the same HAL failure again. Symptom this time round:
+`stream output NOT found. Dropping frame` from the moment recording starts, then on
+Stop & Save `removeRecordingOutput` fails with SCStreamErrorDomain -3812 and `stopCapture`
+fails with -3808 (stream already dead), and `finalizeAndStop()` swallowed both — so
+`MeetingManager` proceeded to process an unfinalized MOV and failed much later with
+AVFoundationErrorDomain -11829 "Cannot Open... media may be damaged." Fix: removed
+`captureMicrophone`/`shouldRecordMicrophoneAudio` again, and changed `finalizeAndStop()`
+to rethrow when `removeRecordingOutput()` fails instead of swallowing it, so a broken
+finalization surfaces immediately instead of as a cryptic downstream AVFoundation error.
+**Guard:** `SCStreamConfiguration.captureMicrophone` must never be set in this app —
+if screen-recording mic capture is wanted, it needs a separate `AVAudioEngine` tap, not
+the SCStream mic aggregation path. If this file is refactored/extracted again, grep the
+diff for `captureMicrophone` before merging.
+
+**Follow-on (2026-08-05), see L9b:** removing `captureMicrophone` means screen recordings
+capture **no microphone at all**. That is a functional gap, not just a config detail.
+
+---
+
+### L9b. Screen recordings capture system audio only — the mic needs its own engine
+
+Added 2026-08-05, directly downstream of L9.
+
+**Symptom:** screen recording works and saves, but `transcript.md` contains only
+`[BLANK_AUDIO]` — nothing the user said was recorded.
+**Cause:** `SCStream.capturesAudio` records **system audio only** (what is playing out of
+the speakers). It never includes the microphone. The only SCK setting that would is
+`captureMicrophone`, which is permanently banned by L9. So after the L9 fix, a screen
+recording of a meeting where the user is *talking* (rather than playing audio) is silent.
+**Fix:** `MeetingManager.startMicrophoneAlongsideScreen()` starts the existing
+`AudioRecorder` (`AVAudioEngine` mic tap → WAV) in parallel with the SCK stream; pause and
+resume drive both in lockstep; `combineAudioSources(system:mic:)` /`mixAudioFiles(_:)` mix
+the MOV's system audio and the mic WAV into one M4A via `AVMutableComposition` +
+`AVMutableAudioMix` before transcription.
+
+**Design notes:**
+- Mic failure is deliberately non-fatal — a screen recording without mic audio is still
+  worth keeping, so it logs and continues with system audio only.
+- Mixing failure falls back to system audio rather than losing the recording.
+- The two sources both start at t=0; the mic starts a few ms after the screen capture, so
+  there is a small, accepted sync offset.
+- `shouldRecordMicrophone` gates it. **Unlike the old `shouldRecordMicrophoneAudio`, this
+  one drives real behaviour** — if you add a UI toggle, bind it to this.
+
+**Guard:** never assume "capturesAudio = true" means the meeting was recorded. Test a
+screen recording by *speaking*, not by playing audio, or the mic path can silently rot.
+
+---
+
+### L9c. Whisper special tokens leaked into saved transcripts
+
+Fixed 2026-08-05.
+
+**Symptom:** `transcript.md` contained
+`<|startoftranscript|><|en|><|transcribe|><|0.00|> [BLANK_AUDIO]<|10.00|><|endoftext|>`.
+**Cause:** `TranscriptFormatter` never stripped WhisperKit's special tokens, and
+`WhisperTranscriber` fell back to `first.text` **raw** whenever the formatted output was
+empty — which is exactly the silent-audio case. Real transcripts carried the tokens too.
+**Fix:** `TranscriptFormatter.cleanSegmentText(_:)` strips `<|…|>` tokens and non-speech
+markers (`[BLANK_AUDIO]`, `[INAUDIBLE]`, …); it is applied per segment and to the
+`first.text` fallback. Genuinely silent audio now saves
+`_No speech was detected in this recording._` instead of claiming the transcriber failed.
 
 ---
 
