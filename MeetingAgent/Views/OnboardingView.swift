@@ -3,6 +3,10 @@ import SwiftUI
 
 struct OnboardingView: View {
     @ObservedObject var manager: MeetingManager
+    /// Must be observed, not reached through `StorageManager.shared` at each use site.
+    /// Reading the singleton directly registers no SwiftUI dependency, so `rootURL`
+    /// changing after a folder pick never redraws this view and GET STARTED stays disabled.
+    @ObservedObject private var storage = StorageManager.shared
     @Binding var hasCompletedOnboarding: Bool
 
     @State private var currentStep = 0
@@ -65,8 +69,8 @@ struct OnboardingView: View {
                         hasCompletedOnboarding = true
                     }
                     .buttonStyle(NBButtonStyle(color: NBDesign.accent, textColor: .white))
-                    .disabled(StorageManager.shared.rootURL == nil)
-                    .opacity(StorageManager.shared.rootURL == nil ? 0.5 : 1.0)
+                    .disabled(storage.rootURL == nil)
+                    .opacity(storage.rootURL == nil ? 0.5 : 1.0)
                 }
             }
             .padding(NBDesign.padding)
@@ -85,7 +89,7 @@ struct OnboardingView: View {
 
     private var welcomeStep: some View {
         VStack(spacing: 16) {
-            Image("Inner Robot Eye 1")
+            Image("deepStateRobot01")
                 .resizable()
                 .scaledToFit()
                 .frame(height: 80)
@@ -172,7 +176,7 @@ struct OnboardingView: View {
 
             // iCloud option
             Button {
-                StorageManager.shared.storageMode = .iCloud
+                storage.storageMode = .iCloud
             } label: {
                 HStack {
                     Image(systemName: "icloud.fill")
@@ -181,13 +185,13 @@ struct OnboardingView: View {
                 .frame(maxWidth: .infinity)
             }
             .buttonStyle(NBButtonStyle(
-                color: StorageManager.shared.storageMode == .iCloud ? NBDesign.foreground : NBDesign.surface,
-                textColor: StorageManager.shared.storageMode == .iCloud ? NBDesign.background : NBDesign.border
+                color: storage.storageMode == .iCloud ? NBDesign.foreground : NBDesign.surface,
+                textColor: storage.storageMode == .iCloud ? NBDesign.background : NBDesign.border
             ))
 
             // Local folder option
             Button {
-                StorageManager.shared.storageMode = .local
+                storage.storageMode = .local
                 manager.selectFolder()
             } label: {
                 HStack {
@@ -197,14 +201,25 @@ struct OnboardingView: View {
                 .frame(maxWidth: .infinity)
             }
             .buttonStyle(NBButtonStyle(
-                color: StorageManager.shared.storageMode == .local ? NBDesign.foreground : NBDesign.surface,
-                textColor: StorageManager.shared.storageMode == .local ? NBDesign.background : NBDesign.border
+                color: storage.storageMode == .local ? NBDesign.foreground : NBDesign.surface,
+                textColor: storage.storageMode == .local ? NBDesign.background : NBDesign.border
             ))
 
-            if let root = StorageManager.shared.rootURL {
+            if let root = storage.rootURL {
                 Text(root.lastPathComponent)
                     .font(NBDesign.captionFont)
                     .foregroundStyle(.secondary)
+                    .padding(NBDesign.smallPadding)
+                    .nbCard()
+            } else if storage.storageMode == .iCloud {
+                // Never fail silently here — this step blocks GET STARTED, so an
+                // unavailable container has to say so rather than look like a dead button.
+                Text(storage.iCloudAvailable
+                     ? "iCloud Drive is on, but the app's container isn't available yet. Try again, or choose a local folder."
+                     : "iCloud Drive is off for this Mac. Turn it on in System Settings → Apple Account → iCloud, or choose a local folder.")
+                    .font(NBDesign.captionFont)
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(NBDesign.accent)
                     .padding(NBDesign.smallPadding)
                     .nbCard()
             }

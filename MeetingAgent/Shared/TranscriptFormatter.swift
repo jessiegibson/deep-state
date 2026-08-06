@@ -8,6 +8,23 @@ import Speech
 
 struct TranscriptFormatter {
 
+    // MARK: - Token cleanup
+
+    /// WhisperKit segment text carries the model's special tokens
+    /// (`<|startoftranscript|>`, `<|en|>`, `<|transcribe|>`, `<|0.00|>`, `<|endoftext|>`)
+    /// and non-speech markers like `[BLANK_AUDIO]`. These are model plumbing, not
+    /// transcript content — strip them before anything is shown or saved.
+    static func cleanSegmentText(_ raw: String) -> String {
+        var text = raw.replacingOccurrences(
+            of: "<\\|[^|>]*\\|>", with: "", options: .regularExpression
+        )
+        text = text.replacingOccurrences(
+            of: "\\[(BLANK_AUDIO|INAUDIBLE|NOISE|SILENCE|MUSIC|APPLAUSE|SOUND)\\]",
+            with: "", options: [.regularExpression, .caseInsensitive]
+        )
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     // MARK: - WhisperKit segments
     // TranscriptionSegment has .start: Float and .end: Float (seconds)
     static func format(segments: [TranscriptionSegment], gapThreshold: Float = 2.0) -> String {
@@ -28,7 +45,7 @@ struct TranscriptFormatter {
 
         return paragraphs
             .map { group in
-                let text = group.map { $0.text.trimmingCharacters(in: .whitespaces) }
+                let text = group.map { cleanSegmentText($0.text) }
                     .filter { !$0.isEmpty }
                     .joined(separator: " ")
                 return capitalizeFirst(text)

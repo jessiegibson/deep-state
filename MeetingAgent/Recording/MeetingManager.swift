@@ -20,7 +20,6 @@ enum PermissionStatus {
 class MeetingManager: NSObject, ObservableObject {
     @Published var isRecording = false
     @Published var statusMessage = "Ready"
-    @Published var liveTranscript = "Almost Ready to GOOOOOO"
     @Published var recordingMode: RecordingMode = .audioOnly
 
     // Screen picker (only relevant in .screenAndAudio mode with multiple displays)
@@ -36,7 +35,10 @@ class MeetingManager: NSObject, ObservableObject {
         didSet { UserDefaults.standard.set(shouldRecordCamera, forKey: "pref_record_camera") }
     }
     @Published var shouldRecordSystemAudio: Bool = true
-    @Published var shouldRecordMicrophoneAudio: Bool = true
+    /// Whether to capture the mic alongside a screen recording. See
+    /// `startMicrophoneAlongsideScreen()` — this is a separate `AVAudioEngine` tap,
+    /// NOT `SCStreamConfiguration.captureMicrophone` (which is unusable here).
+    @Published var shouldRecordMicrophone: Bool = true
 
     // LLM settings accessor (passed to LLMSettingsView). Summarization itself lives
     // in TranscriptViewModel — MeetingManager only exposes the shared settings object.
@@ -53,15 +55,24 @@ class MeetingManager: NSObject, ObservableObject {
 
     private let screenRecorder = ScreenRecorder()
     private var lastRecordingURL: URL?
+    /// Guards against a second STOP while finalization is still in flight — two
+    /// concurrent stops race on the same stream and corrupt the recording.
+    @Published private(set) var isStopping = false
     private let whisperTranscriber = WhisperTranscriber()
 
     // Audio-only capture + file import helpers
     private let audioRecorder = AudioRecorder()
     private let fileImportService = FileImportService()
 
-    // Audio file to save once recording stops (WAV, then reassigned to the M4A used
-    // for the speaker-labeling handoff in finalizeWithSpeakerLabels).
+    // Audio file to save once recording stops (WAV, then reassigned to the M4A).
     private var audioOnlyURL: URL?
+
+    /// Mic WAV recorded in parallel with a screen capture, or nil when the mic isn't
+    /// being captured. Mixed with the MOV's system audio in `stopAndTranscribe()`.
+    private var screenMicURL: URL?
+    /// Why the mic isn't being captured, when it isn't. Surfaced in the status line so
+    /// a silent recording is never a surprise discovered after the meeting.
+    @Published private(set) var micStatusNote: String?
 
     // Voice Visualizer Properties
     @Published var amplitudes: [CGFloat] = Array(repeating: 0.1, count: 5)
@@ -73,10 +84,6 @@ class MeetingManager: NSObject, ObservableObject {
     @Published var meetingLibrary: [MeetingRecord] = []
     private var recordingSegments: [URL] = []
     private var segmentCounter = 0
-
-    // Speaker diarization (voice analytics + raw segments live in LiveTranscriber)
-    @Published var speakerSegments: [SpeakerSegment] = []
-    @Published var isSpeakerLabelingOpen = false
 
     func checkPermissions() {
         if let message = PermissionsService.requestStartupPermissions() {
@@ -173,7 +180,7 @@ class MeetingManager: NSObject, ObservableObject {
                 selectedDisplayID = ScreenRecorder.displayContainingKeyWindow(in: displays)
             }
         } catch {
-            print("❌ Failed to list displays: \(error)")
+            print("Failed to list displays: \(error)")
         }
     }
 
@@ -211,16 +218,74 @@ class MeetingManager: NSObject, ObservableObject {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("temp_rec_0.mov")
         self.lastRecordingURL = url
 
+        // Ask for mic access before capture begins so the prompt isn't recorded.
+        let micPermitted = await resolveMicrophonePermission()
+
         do {
             screenRecorder.captureSystemAudio = shouldRecordSystemAudio
-            screenRecorder.captureMicrophone = shouldRecordMicrophoneAudio
             screenRecorder.selectedDisplayID = selectedDisplayID
             try await screenRecorder.startCapture(to: url)
+            startMicrophoneAlongsideScreen(permitted: micPermitted)
             isRecording = true
-            statusMessage = "Recording..."
+            // Never let a missing mic pass unnoticed — it's the difference between
+            // recording the meeting and recording silence.
+            if let note = micStatusNote {
+                statusMessage = "Recording — NO MIC (\(note))"
+            } else {
+                statusMessage = "Recording..."
+            }
         } catch {
             statusMessage = "Error: \(error.localizedDescription)"
-            print("❌ Start error: \(error)")
+            print("Start error: \(error)")
+        }
+    }
+
+    /// Resolves microphone permission *before* screen capture starts, so the system
+    /// prompt isn't captured into the recording. Returns whether the mic may be used.
+    private func resolveMicrophonePermission() async -> Bool {
+        guard shouldRecordMicrophone else { return false }
+        var status = AVCaptureDevice.authorizationStatus(for: .audio)
+        if status == .notDetermined {
+            _ = await AVCaptureDevice.requestAccess(for: .audio)
+            status = AVCaptureDevice.authorizationStatus(for: .audio)
+        }
+        return status == .authorized
+    }
+
+    /// Starts a microphone capture that runs in parallel with the ScreenCaptureKit
+    /// stream.
+    ///
+    /// `SCStream.capturesAudio` records **system audio only** — whatever is playing
+    /// out of the speakers — and never the microphone. The one SCK setting that would
+    /// include the mic (`SCStreamConfiguration.captureMicrophone`) is unusable here:
+    /// it builds an aggregated HAL device that fails in a sandboxed app and drops every
+    /// frame (REGRESSION_REGISTER.md L9). So the mic gets its own `AVAudioEngine` tap
+    /// and the two sources are mixed back together at save time.
+    ///
+    /// Called *after* `startCapture` — starting an audio engine before ScreenCaptureKit
+    /// makes the two compete as HAL clients (`_StartIO` error 35).
+    ///
+    /// Failure is non-fatal (a screen recording without mic audio is still worth
+    /// keeping) but it is never silent: `micStatusNote` surfaces the reason in the UI.
+    private func startMicrophoneAlongsideScreen(permitted: Bool) {
+        screenMicURL = nil
+        micStatusNote = nil
+
+        guard shouldRecordMicrophone else { return }
+        guard permitted else {
+            micStatusNote = "microphone permission denied"
+            print("[MeetingManager] mic not authorized — system audio only")
+            return
+        }
+
+        do {
+            screenMicURL = try audioRecorder.start()
+            let device = AVCaptureDevice.default(for: .audio)?.localizedName ?? "unknown input"
+            print("[MeetingManager] mic capture started on '\(device)'")
+        } catch {
+            micStatusNote = error.localizedDescription
+            print("[MeetingManager] mic capture unavailable: \(error.localizedDescription)")
+            screenMicURL = nil
         }
     }
     
@@ -230,13 +295,31 @@ class MeetingManager: NSObject, ObservableObject {
             return
         }
 
+        guard !isStopping else { return }
+        isStopping = true
+        defer { isStopping = false }
+
         statusMessage = "Stopping..."
         isPaused = false
 
         do {
-            // Finalize the current segment's MOV (removeRecordingOutput → await
-            // didFinishRecordingTo:) and stop capture before reading the file.
+            // Stop capture and wait for the recording output to finish writing the
+            // MOV before reading it.
             try await screenRecorder.finalizeAndStop()
+            // Stop the parallel mic tap in lockstep with the screen capture.
+            var micURL: URL?
+            if screenMicURL != nil {
+                audioRecorder.stop()
+                micURL = audioRecorder.wavURL
+                screenMicURL = nil
+                // A mic file that exists but holds no samples is the failure mode that
+                // silently produced [BLANK_AUDIO] recordings — check, don't assume.
+                if let url = micURL, !micFileHasAudio(url) {
+                    print("[MeetingManager] mic WAV has no usable audio — discarding")
+                    micStatusNote = "microphone recorded no audio"
+                    micURL = nil
+                }
+            }
             isRecording = false
 
             if let currentURL = lastRecordingURL {
@@ -245,6 +328,24 @@ class MeetingManager: NSObject, ObservableObject {
 
             guard !recordingSegments.isEmpty else {
                 statusMessage = "No recording found"
+                return
+            }
+
+            // A zero-byte or missing file means finalization didn't produce anything.
+            // Report that plainly instead of letting AVFoundation surface it later as
+            // a cryptic "Cannot Open / media may be damaged" error.
+            recordingSegments = recordingSegments.filter { url in
+                let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)
+                let size = (attrs?[.size] as? NSNumber)?.intValue ?? 0
+                if size == 0 {
+                    print("[MeetingManager] discarding empty segment \(url.lastPathComponent)")
+                    return false
+                }
+                return true
+            }
+
+            guard !recordingSegments.isEmpty else {
+                statusMessage = "Recording was empty — nothing was captured"
                 return
             }
 
@@ -258,7 +359,12 @@ class MeetingManager: NSObject, ObservableObject {
             }
 
             statusMessage = "Extracting audio..."
-            let audioURL = try await extractAudio(from: videoURL)
+            let systemAudioURL = try await extractAudio(from: videoURL)
+
+            // Two independent sources: system audio (inside the MOV) and the mic
+            // (its own WAV). Mix whichever we actually got into one track.
+            statusMessage = "Mixing audio..."
+            let audioURL = try await combineAudioSources(system: systemAudioURL, mic: micURL)
 
             let transcriptText: String
             if let audioURL {
@@ -273,15 +379,26 @@ class MeetingManager: NSObject, ObservableObject {
             statusMessage = "Saving files..."
             saveTranscript(text: transcriptText, videoURL: videoURL, audioURL: audioURL)
 
-            // Cleanup segment files and any merged temp file
+            // Cleanup segment files and any merged/intermediate temp files
             for url in recordingSegments { try? FileManager.default.removeItem(at: url) }
             if recordingSegments.count > 1 { try? FileManager.default.removeItem(at: videoURL) }
-            if let audioURL { try? FileManager.default.removeItem(at: audioURL) }
+            for url in [audioURL, systemAudioURL, micURL].compactMap({ $0 }) {
+                try? FileManager.default.removeItem(at: url)
+            }
             recordingSegments = []
             isNotesSheetOpen = false
             loadLibrary()
+            if let note = micStatusNote {
+                statusMessage += " — no mic audio (\(note))"
+            }
 
         } catch {
+            // The mic engine is stopped mid-`do`; if we threw before that, stop it here
+            // so a failed save doesn't leave the microphone running.
+            if screenMicURL != nil {
+                audioRecorder.stop()
+                screenMicURL = nil
+            }
             let ns = error as NSError
             statusMessage = "Processing failed: \(error.localizedDescription) [\(ns.domain) \(ns.code)]"
             print("[MeetingManager] stopAndTranscribe failed: \(ns.domain) \(ns.code) — \(ns)")
@@ -303,6 +420,8 @@ class MeetingManager: NSObject, ObservableObject {
             do {
                 // Finalize the current segment file before pausing.
                 try await screenRecorder.finalizeAndStop()
+                // Pause the mic too, so its WAV stays aligned with the video segments.
+                if screenMicURL != nil { audioRecorder.pause() }
                 if let url = lastRecordingURL {
                     recordingSegments.append(url)
                 }
@@ -332,9 +451,9 @@ class MeetingManager: NSObject, ObservableObject {
             self.lastRecordingURL = url
             do {
                 screenRecorder.captureSystemAudio = shouldRecordSystemAudio
-                screenRecorder.captureMicrophone = shouldRecordMicrophoneAudio
                 screenRecorder.selectedDisplayID = selectedDisplayID
                 try await screenRecorder.startCapture(to: url)
+                if screenMicURL != nil { try audioRecorder.resume() }
                 isPaused = false
                 statusMessage = "Recording..."
             } catch {
@@ -346,6 +465,105 @@ class MeetingManager: NSObject, ObservableObject {
     // MARK: - Transcription (delegates to WhisperTranscriber)
     private func transcribeAudio(audioURL: URL) async -> String {
         await whisperTranscriber.transcribe(audioURL: audioURL)
+    }
+
+    // MARK: - Audio Mixing
+
+    /// Whether a recorded WAV holds any actual samples. Reports the peak level so a
+    /// mic that ran but heard nothing (muted, wrong input device) is distinguishable
+    /// in the log from a mic that never started.
+    private func micFileHasAudio(_ url: URL) -> Bool {
+        guard let file = try? AVAudioFile(forReading: url), file.length > 0 else {
+            print("[MeetingManager] mic WAV unreadable or empty")
+            return false
+        }
+        // Sample the first few seconds — enough to tell signal from digital silence
+        // without reading a long meeting into memory.
+        let frames = AVAudioFrameCount(min(file.length, Int64(file.processingFormat.sampleRate * 5)))
+        guard frames > 0,
+              let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: frames),
+              (try? file.read(into: buffer)) != nil,
+              let channels = buffer.floatChannelData
+        else { return true }  // can't measure — keep it rather than discard audio
+
+        var peak: Float = 0
+        for channel in 0..<Int(buffer.format.channelCount) {
+            let samples = channels[channel]
+            for i in 0..<Int(buffer.frameLength) { peak = max(peak, abs(samples[i])) }
+        }
+        print(String(format: "[MeetingManager] mic peak level: %.4f over %.1fs",
+                     peak, Double(file.length) / file.processingFormat.sampleRate))
+        return peak > 0.0001
+    }
+
+    /// Combines the screen recording's system audio with the separately-captured mic
+    /// into a single M4A. Returns whichever single source exists if only one does, or
+    /// nil if neither did. Mixing failures fall back to the system audio rather than
+    /// losing the recording.
+    private func combineAudioSources(system: URL?, mic: URL?) async throws -> URL? {
+        switch (system, mic) {
+        case (nil, nil):
+            return nil
+        case (let system?, nil):
+            return system
+        case (nil, let mic?):
+            // Mic only (e.g. the capture had no system audio) — still needs M4A.
+            return try? await audioRecorder.convertToM4A(from: mic)
+        case (let system?, let mic?):
+            do {
+                return try await mixAudioFiles([system, mic])
+            } catch {
+                print("[MeetingManager] audio mix failed, using system audio only: \(error)")
+                return system
+            }
+        }
+    }
+
+    /// Mixes several audio files down to one M4A, all starting at t=0.
+    private func mixAudioFiles(_ urls: [URL]) async throws -> URL {
+        let composition = AVMutableComposition()
+        var inputParameters: [AVMutableAudioMixInputParameters] = []
+
+        for url in urls {
+            let asset = AVURLAsset(url: url)
+            guard let sourceTrack = try await asset.loadTracks(withMediaType: .audio).first,
+                  let track = composition.addMutableTrack(
+                      withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid
+                  )
+            else { continue }
+
+            let duration = try await asset.load(.duration)
+            guard duration.isValid, duration > .zero else { continue }
+            try track.insertTimeRange(
+                CMTimeRange(start: .zero, duration: duration), of: sourceTrack, at: .zero
+            )
+
+            let params = AVMutableAudioMixInputParameters(track: track)
+            params.setVolume(1.0, at: .zero)
+            inputParameters.append(params)
+        }
+
+        guard !composition.tracks(withMediaType: .audio).isEmpty else {
+            throw NSError(domain: "MeetingManager", code: -2,
+                          userInfo: [NSLocalizedDescriptionKey: "No audio tracks to mix"])
+        }
+
+        let audioMix = AVMutableAudioMix()
+        audioMix.inputParameters = inputParameters
+
+        let outputURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("mixed_audio.m4a")
+        try? FileManager.default.removeItem(at: outputURL)
+
+        guard let exportSession = AVAssetExportSession(
+            asset: composition, presetName: AVAssetExportPresetAppleM4A
+        ) else {
+            throw NSError(domain: "MeetingManager", code: -3,
+                          userInfo: [NSLocalizedDescriptionKey: "Failed to create audio mix export session"])
+        }
+        exportSession.audioMix = audioMix
+        try await exportSession.export(to: outputURL, as: .m4a)
+        return outputURL
     }
 
     // MARK: - Audio Extraction
@@ -462,7 +680,6 @@ class MeetingManager: NSObject, ObservableObject {
             self.audioOnlyURL = wavURL
 
             isRecording = true
-            liveTranscript = "Transcript will be available after recording stops."
             meetingNotes = ""
             isNotesSheetOpen = true
             statusMessage = "Recording (Audio Only)..."
@@ -491,14 +708,14 @@ class MeetingManager: NSObject, ObservableObject {
         do {
             m4aURL = try await audioRecorder.convertToM4A(from: wavURL)
         } catch {
-            // Conversion failed. Don't lose the recording. Save the WAV instead
-            // and use whatever transcript exists (live transcript or empty).
+            // Conversion failed. Don't lose the recording — save the WAV instead.
             print("[MeetingManager] M4A conversion failed: \(error)")
             statusMessage = "Saving raw audio (M4A conversion failed)..."
-            let fallbackText = liveTranscript.isEmpty
-                ? "_Transcript unavailable. Audio saved as WAV._"
-                : liveTranscript
-            saveTranscript(text: fallbackText, videoURL: nil, audioURL: wavURL)
+            saveTranscript(
+                text: "_Transcript unavailable. Audio saved as WAV._",
+                videoURL: nil,
+                audioURL: wavURL
+            )
             try? FileManager.default.removeItem(at: wavURL)
             statusMessage = "Saved (WAV, no M4A)"
             return
@@ -532,47 +749,6 @@ class MeetingManager: NSObject, ObservableObject {
     func speechRecognitionPermissionStatus() -> PermissionStatus { PermissionsService.speechRecognitionStatus() }
 
     func requestSpeechRecognitionPermission() async -> Bool { await PermissionsService.requestSpeechRecognition() }
-
-    // MARK: - Speaker Diarization
-
-    /// Called by SpeakerLabelingView when user finishes naming speakers
-    func finalizeWithSpeakerLabels(_ labeledSegments: [SpeakerSegment]) {
-        let transcriptText = buildDiarizedTranscript(from: labeledSegments)
-
-        // Update voice prints for named speakers
-        for segment in labeledSegments {
-            guard let name = segment.speakerName else { continue }
-            VoicePrintStore.shared.upsert(name: name, features: segment.features)
-        }
-
-        statusMessage = "Saving files..."
-        saveTranscript(text: transcriptText, videoURL: nil, audioURL: audioOnlyURL)
-
-        if let m4a = audioOnlyURL { try? FileManager.default.removeItem(at: m4a) }
-        audioOnlyURL = nil
-        speakerSegments = []
-        isSpeakerLabelingOpen = false
-        isNotesSheetOpen = false
-        statusMessage = "Saved successfully"
-    }
-
-    func cancelSpeakerLabeling() {
-        // Save without speaker labels using plain transcript
-        saveTranscript(text: liveTranscript, videoURL: nil, audioURL: audioOnlyURL)
-        if let m4a = audioOnlyURL { try? FileManager.default.removeItem(at: m4a) }
-        audioOnlyURL = nil
-        speakerSegments = []
-        isSpeakerLabelingOpen = false
-        isNotesSheetOpen = false
-        statusMessage = "Saved successfully"
-    }
-
-    private func buildDiarizedTranscript(from segments: [SpeakerSegment]) -> String {
-        guard !segments.isEmpty else { return liveTranscript }
-        return segments.map { seg in
-            "**\(seg.displayName):** \(seg.text)"
-        }.joined(separator: "\n\n")
-    }
 
 }
 

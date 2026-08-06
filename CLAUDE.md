@@ -140,9 +140,11 @@ See `documentation/INFO_PLIST_URGENT.md` for permission setup details.
 
 ### Screen Recording File Finalization Fix
 - `SCRecordingOutput` does NOT finalize the MOV file when `stopCapture()` returns — the moov atom is unwritten, making the file unreadable ("cannot open" error)
-- Fix: call `removeRecordingOutput()` before `stopCapture()`, then `await` the `didFinishRecordingTo:` delegate callback via `CheckedContinuation` before processing
+- Fix: call `stopCapture()` (which itself finalizes the file, per `SCStream.h`), then `await` the `recordingOutputDidFinishRecording(_:)` delegate via `CheckedContinuation` before processing
+- NEVER call `removeRecordingOutput()` — it is redundant with `stopCapture()` and throws `SCStreamErrorInvalidParameter` (-3812)
+- There is no `didFinishRecordingTo:` method. `SCRecordingOutputDelegate` is exactly `recordingOutputDidStartRecording(_:)`, `recordingOutputDidFinishRecording(_:)`, `recordingOutput(_:didFailWithError:)` — all `@optional`, so a wrong signature compiles and silently never fires
 - This applies to both stop and pause flows — any time we need the recorded file to be valid, we must wait for finalization
-- **Rule**: Never access an `SCRecordingOutput` file until the `didFinishRecordingTo:` delegate has fired
+- **Rule**: Never access an `SCRecordingOutput` file until `recordingOutputDidFinishRecording(_:)` has fired. See REGRESSION_REGISTER.md L5 — the earlier version of this rule was wrong and caused months of failures
 
 ### Window Resizability
 - Removed fixed `frame(width:height:)` from `ContentView`; replaced with `frame(minWidth:minHeight:)`

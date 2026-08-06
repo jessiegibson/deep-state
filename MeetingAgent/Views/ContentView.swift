@@ -16,7 +16,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 0) {
             // Header
             HStack(spacing: NBDesign.smallPadding) {
-                Image("Inner Robot Eye 1")
+                Image("deepStateRobot01")
                     .resizable()
                     .interpolation(.high)
                     .frame(width: 32, height: 32)
@@ -221,16 +221,6 @@ struct RecordingView: View {
                             .foregroundStyle(manager.isPaused ? Color.secondary : NBDesign.accent)
                     }
 
-                    if manager.recordingMode == .audioOnly && !manager.liveTranscript.isEmpty {
-                        ScrollView {
-                            Text(manager.liveTranscript)
-                                .font(NBDesign.bodyFont)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .frame(maxHeight: 60)
-                        .nbCard()
-                    }
-
                     VoiceVisualizer(amplitudes: manager.amplitudes)
                 }
                 .transition(.opacity)
@@ -312,13 +302,15 @@ struct RecordingView: View {
                         }
                     }
                     .buttonStyle(NBButtonStyle(color: NBDesign.surface, textColor: NBDesign.foreground))
+                    .disabled(manager.isStopping)
 
-                    Button("STOP & SAVE") {
+                    Button(manager.isStopping ? "SAVING…" : "STOP & SAVE") {
                         Task {
                             await manager.stopAndTranscribe()
                         }
                     }
                     .buttonStyle(NBButtonStyle(color: NBDesign.accent, textColor: NBDesign.background))
+                    .disabled(manager.isStopping)
                 } else {
                     Button("IMPORT") {
                         Task { await manager.importFiles() }
@@ -338,9 +330,6 @@ struct RecordingView: View {
             }
         }
         .padding(NBDesign.padding)
-        .sheet(isPresented: $manager.isSpeakerLabelingOpen) {
-            SpeakerLabelingView(manager: manager)
-        }
         .onChange(of: calendar.shouldAutoStart) { _, firing in
             guard firing, !manager.isRecording else { return }
             calendar.shouldAutoStart = false

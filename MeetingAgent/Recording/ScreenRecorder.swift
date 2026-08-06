@@ -17,15 +17,20 @@ struct DisplayOption: Identifiable, Equatable {
 /// Owns the ScreenCaptureKit stream lifecycle: starting capture, the recording-output
 /// finalization handshake, and merging paused segments. Extracted from `MeetingManager`.
 ///
-/// IMPORTANT: `SCRecordingOutput` does NOT finalize the MOV (moov atom) when
-/// `stopCapture()` returns. We must call `removeRecordingOutput()` and await the
-/// `didFinishRecordingTo:` delegate before the file is readable. `finalizeAndStop()`
-/// encapsulates that handshake — never read a captured file without calling it first.
+/// IMPORTANT: `SCRecordingOutput` does NOT finalize the MOV (moov atom) synchronously.
+/// Per `SCStream.h`, "if stopCapture is called without removing recordingOutput,
+/// recording will be stopped and finish writing into the file" — so `stopCapture()`
+/// begins finalization and `recordingOutputDidFinishRecording(_:)` reports when the
+/// file is actually readable. `finalizeAndStop()` encapsulates that handshake —
+/// never read a captured file without calling it first.
+///
+/// Do NOT reintroduce `removeRecordingOutput()` here: it is redundant with
+/// `stopCapture()` and throws `SCStreamErrorInvalidParameter` (-3812) once the
+/// recording output has already finished. See REGRESSION_REGISTER.md L5.
 @MainActor
 final class ScreenRecorder: NSObject, SCStreamDelegate, SCRecordingOutputDelegate {
     /// Mirrors the user's "record system audio" preference; applied at capture start.
     var captureSystemAudio = false
-    var captureMicrophone = false
     /// Display to record, chosen by the user. Falls back to the first available display
     /// when nil or when the id no longer matches a connected display.
     var selectedDisplayID: CGDirectDisplayID?
@@ -36,7 +41,13 @@ final class ScreenRecorder: NSObject, SCStreamDelegate, SCRecordingOutputDelegat
 
     private var stream: SCStream?
     private var recordingOutput: SCRecordingOutput?
+
+    /// Finalization handshake state. `didFinishRecording` guards the case where the
+    /// delegate fires *before* `finalizeAndStop()` starts awaiting, which would
+    /// otherwise park the continuation forever.
     private var recordingFinishedContinuation: CheckedContinuation<Void, Never>?
+    private var didFinishRecording = false
+    private var recordingFailure: Error?
 
     var isCapturing: Bool { stream != nil }
 
@@ -76,6 +87,8 @@ final class ScreenRecorder: NSObject, SCStreamDelegate, SCRecordingOutputDelegat
             stream = nil
         }
         recordingOutput = nil
+        didFinishRecording = false
+        recordingFailure = nil
 
         let content = try await SCShareableContent.current
         guard let display = content.displays.first(where: { $0.displayID == selectedDisplayID })
@@ -93,7 +106,11 @@ final class ScreenRecorder: NSObject, SCStreamDelegate, SCRecordingOutputDelegat
         config.width = Int(display.width)
         config.height = Int(display.height)
         config.capturesAudio = captureSystemAudio
-        config.captureMicrophone = captureMicrophone
+        // Do NOT set config.captureMicrophone here — in a sandboxed app it makes
+        // ScreenCaptureKit build an aggregated HAL virtual device (system audio + mic),
+        // and HAL daemon communication fails, dropping every frame from the start
+        // (REGRESSION_REGISTER.md L9). Screen recordings capture system audio only;
+        // mic audio is not available via SCStream in this app.
         if captureSystemAudio {
             // Apple requires an explicit audio format when capturesAudio is on;
             // leaving these unset can fail the stream with "invalid parameter".
@@ -108,8 +125,19 @@ final class ScreenRecorder: NSObject, SCStreamDelegate, SCRecordingOutputDelegat
 
         let recordConfig = SCRecordingOutputConfiguration()
         recordConfig.outputURL = url
-        recordConfig.outputFileType = .mov
-        recordConfig.videoCodecType = .h264
+        // Only apply container/codec overrides the OS actually advertises — setting an
+        // unsupported value is a documented source of SCStreamErrorInvalidParameter.
+        // Falling back to the defaults (MPEG-4 / H.264) still produces a readable file.
+        if recordConfig.availableOutputFileTypes.contains(.mov) {
+            recordConfig.outputFileType = .mov
+        } else {
+            print("[ScreenRecorder] .mov unsupported; using default \(recordConfig.outputFileType)")
+        }
+        if recordConfig.availableVideoCodecTypes.contains(.h264) {
+            recordConfig.videoCodecType = .h264
+        } else {
+            print("[ScreenRecorder] h264 unsupported; using default \(recordConfig.videoCodecType)")
+        }
 
         stream = SCStream(filter: filter, configuration: config, delegate: self)
         recordingOutput = SCRecordingOutput(configuration: recordConfig, delegate: self)
@@ -123,29 +151,60 @@ final class ScreenRecorder: NSObject, SCStreamDelegate, SCRecordingOutputDelegat
         try await s.startCapture()
     }
 
-    /// Finalizes the current segment's MOV file (removeRecordingOutput → await
-    /// didFinishRecordingTo:) then stops capture. Safe to call when not capturing.
+    /// Stops capture and waits for the recording output to finish writing the file.
+    /// Safe to call when not capturing. Throws only if the recording output itself
+    /// reported a failure — the file is unusable in that case.
     func finalizeAndStop() async throws {
-        if let s = stream, let ro = recordingOutput {
-            do {
-                try s.removeRecordingOutput(ro)
-                await withCheckedContinuation { continuation in
-                    self.recordingFinishedContinuation = continuation
-                }
-            } catch {
-                print("[ScreenRecorder] removeRecordingOutput failed: \(error)")
-            }
-            // The MOV is finalized once didFinishRecordingTo: has fired. If the stream
-            // already died internally (e.g. an audio pipeline error), stopCapture()
-            // throws — but the recording on disk is still good, so don't propagate.
-            do {
-                try await s.stopCapture()
-            } catch {
-                print("[ScreenRecorder] stopCapture failed after finalization (recording kept): \(error)")
-            }
+        guard let s = stream else {
+            stream = nil
+            recordingOutput = nil
+            return
         }
-        stream = nil
-        recordingOutput = nil
+        defer {
+            stream = nil
+            recordingOutput = nil
+        }
+
+        // stopCapture() both stops the stream and tells the recording output to
+        // finish writing. If the stream already died internally, this throws -3808
+        // ("already stopped") — the recording on disk is still being finalized, so
+        // don't propagate; wait for the delegate below to say whether it's good.
+        do {
+            try await s.stopCapture()
+        } catch {
+            print("[ScreenRecorder] stopCapture failed, awaiting finalization anyway: \(error)")
+        }
+
+        await awaitRecordingFinished(timeout: .seconds(15))
+
+        if let failure = recordingFailure {
+            throw failure
+        }
+    }
+
+    /// Awaits `recordingOutputDidFinishRecording(_:)` / `didFailWithError:`, giving up
+    /// after `timeout` so a delegate that never arrives can't wedge the stop flow.
+    private func awaitRecordingFinished(timeout: Duration) async {
+        guard !didFinishRecording else { return }
+
+        let timeoutTask = Task { @MainActor in
+            try? await Task.sleep(for: timeout)
+            guard !Task.isCancelled else { return }
+            print("[ScreenRecorder] timed out waiting for recording finalization")
+            self.resumeFinalizationWaiter()
+        }
+        defer { timeoutTask.cancel() }
+
+        await withCheckedContinuation { continuation in
+            self.recordingFinishedContinuation = continuation
+        }
+    }
+
+    /// Resumes the finalization waiter exactly once. MainActor-isolated, so the
+    /// delegate callbacks and the timeout task can't double-resume.
+    private func resumeFinalizationWaiter() {
+        recordingFinishedContinuation?.resume()
+        recordingFinishedContinuation = nil
     }
 
     /// Concatenates paused recording segments into a single MOV via composition.
@@ -204,17 +263,29 @@ final class ScreenRecorder: NSObject, SCStreamDelegate, SCRecordingOutputDelegat
         }
     }
 
-    nonisolated func recordingOutput(_ recordingOutput: SCRecordingOutput, didFinishRecordingTo url: URL) {
+    // NOTE: these three selectors are the *entire* SCRecordingOutputDelegate protocol
+    // (see SCRecordingOutput.h). They are @optional, so a misspelled signature compiles
+    // fine and simply never fires — which is exactly how the old
+    // `recordingOutput(_:didFinishRecordingTo:)` silently broke finalization.
+    // Do not rename these without checking the header.
+    nonisolated func recordingOutputDidStartRecording(_ recordingOutput: SCRecordingOutput) {
         Task { @MainActor in
-            self.recordingFinishedContinuation?.resume()
-            self.recordingFinishedContinuation = nil
+            print("[ScreenRecorder] recording started")
+        }
+    }
+
+    nonisolated func recordingOutputDidFinishRecording(_ recordingOutput: SCRecordingOutput) {
+        Task { @MainActor in
+            self.didFinishRecording = true
+            self.resumeFinalizationWaiter()
         }
     }
 
     nonisolated func recordingOutput(_ recordingOutput: SCRecordingOutput, didFailWithError error: Error) {
         Task { @MainActor in
-            self.recordingFinishedContinuation?.resume()
-            self.recordingFinishedContinuation = nil
+            self.didFinishRecording = true
+            self.recordingFailure = error
+            self.resumeFinalizationWaiter()
             self.onRecorderError?(error)
         }
     }
