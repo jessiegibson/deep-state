@@ -25,6 +25,12 @@ final class AudioRecorder {
     ///
     
     
+    /// How long to keep waiting for the input device to settle on a new format after an
+    /// `.AVAudioEngineConfigurationChange`. A Bluetooth A2DP→HFP switch normally settles
+    /// well inside a second; 100 ms × 50 gives it 5 seconds before we call it lost.
+    static let tapRestoreRetryDelayMilliseconds = 100
+    static let maxTapRestoreAttempts = 50
+
     nonisolated static func wavWriteSettings(sampleRate: Double, channels: AVAudioChannelCount) -> [String: Any] {
         [
             AVFormatIDKey: kAudioFormatLinearPCM,
@@ -169,29 +175,65 @@ final class AudioRecorder {
 
         // Stop before re-tapping. Reinstalling on a running engine mid-renegotiation is
         // what lets the bus format move underneath the install.
-        let wasRunning = engine.isRunning
-        if wasRunning { engine.stop() }
+        if engine.isRunning { engine.stop() }
         engine.inputNode.removeTap(onBus: 0)
-
-        let newFormat = engine.inputNode.outputFormat(forBus: 0)
-        guard newFormat.sampleRate > 0, newFormat.channelCount > 0 else {
-            print("[AudioRecorder] Input device went away after configuration change")
-            return
-        }
-        print("[AudioRecorder] Input reconfigured to \(newFormat.sampleRate) Hz, \(newFormat.channelCount) ch")
 
         // Drop the converter so the next buffer rebuilds it from the new input format
         // to the WAV's original processing format.
         converter = nil
+
+        restoreTap(attempt: 0)
+    }
+
+    /// Reinstalls the tap once the input device has settled on its new format.
+    ///
+    /// An A2DP→HFP switch is not atomic: for a beat the input node reports either a 0 Hz
+    /// format (device momentarily gone) or a stale client format that disagrees with the
+    /// hardware — that disagreement is what produces
+    /// `AVAudioEngineGraph.mm: Error, formats don't match! Input HW format: 16000 Hz,
+    /// tap format: 44100 Hz`, after which the tap delivers nothing for the rest of the
+    /// session.
+    ///
+    /// This used to give up on the first invalid reading, having *already* removed the tap
+    /// and stopped the engine, so recording died silently and left a WAV too short for
+    /// `AVAssetExportSession` — surfacing to the user as "Transcript unavailable. Audio
+    /// saved as WAV." Retry on a short backoff instead, and only install once the hardware
+    /// and bus formats agree.
+    private func restoreTap(attempt: Int) {
+        guard let engine else { return }
+
+        let hardwareFormat = engine.inputNode.inputFormat(forBus: 0)
+        let busFormat = engine.inputNode.outputFormat(forBus: 0)
+        let settled = hardwareFormat.sampleRate > 0
+            && busFormat.sampleRate > 0
+            && hardwareFormat.sampleRate == busFormat.sampleRate
+            && hardwareFormat.channelCount == busFormat.channelCount
+
+        guard settled else {
+            guard attempt < Self.maxTapRestoreAttempts else {
+                print("""
+                [AudioRecorder] Input never settled after configuration change \
+                (hardware \(hardwareFormat.sampleRate) Hz / bus \(busFormat.sampleRate) Hz) — \
+                recording stopped
+                """)
+                return
+            }
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .milliseconds(Self.tapRestoreRetryDelayMilliseconds))
+                self?.restoreTap(attempt: attempt + 1)
+            }
+            return
+        }
+
+        print("[AudioRecorder] Input reconfigured to \(busFormat.sampleRate) Hz, \(busFormat.channelCount) ch")
         installTap()
 
-        if !isPausedByUser {
-            engine.prepare()
-            do {
-                try engine.start()
-            } catch {
-                print("[AudioRecorder] Restart after configuration change failed: \(error)")
-            }
+        guard !isPausedByUser else { return }
+        engine.prepare()
+        do {
+            try engine.start()
+        } catch {
+            print("[AudioRecorder] Restart after configuration change failed: \(error)")
         }
     }
 

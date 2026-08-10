@@ -11,6 +11,7 @@
 		11D293012F64DE3B00B76594 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 11D293022F64DE3B00B76594 /* WhisperKit */; };
 		11FE81532F23398500D6AE57 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 11FE81522F23398500D6AE57 /* WhisperKit */; };
 		2D71FA4A39CD453FA2F5A412 /* AudioRecorderSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F608AEBE50DF7C39E657B667 /* AudioRecorderSettingsTests.swift */; };
+		7411909B504CB06F58E03E9F /* MeetingRecordSectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8DEA4275438256ED7FEA48A /* MeetingRecordSectionTests.swift */; };
 		B752697C09EF44CF2633E9B9 /* TranscriptFormatterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4023EDE6698552DFBB8072A2 /* TranscriptFormatterTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -26,9 +27,10 @@
 
 /* Begin PBXFileReference section */
 		11A5CC453022909800603150 /* Deep State Meeting Agent MacOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Deep State Meeting Agent MacOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		11A5CC463022909800603150 /* deep-state.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "deep-state.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		11A5CC463022909800603150 /* Deep State Meeting Agent iOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Deep State Meeting Agent iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		4023EDE6698552DFBB8072A2 /* TranscriptFormatterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TranscriptFormatterTests.swift; sourceTree = "<group>"; };
 		574A487EF53B10F0B5B41EC6 /* MeetingAgentTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MeetingAgentTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B8DEA4275438256ED7FEA48A /* MeetingRecordSectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingRecordSectionTests.swift; sourceTree = "<group>"; };
 		B9BE699DDE809F2A9D50F2D4 /* SummaryTemplateTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SummaryTemplateTests.swift; sourceTree = "<group>"; };
 		F608AEBE50DF7C39E657B667 /* AudioRecorderSettingsTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AudioRecorderSettingsTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -92,6 +94,7 @@
 				4023EDE6698552DFBB8072A2 /* TranscriptFormatterTests.swift */,
 				B9BE699DDE809F2A9D50F2D4 /* SummaryTemplateTests.swift */,
 				F608AEBE50DF7C39E657B667 /* AudioRecorderSettingsTests.swift */,
+				B8DEA4275438256ED7FEA48A /* MeetingRecordSectionTests.swift */,
 			);
 			path = MeetingAgentTests;
 			sourceTree = "<group>";
@@ -112,7 +115,7 @@
 			children = (
 				574A487EF53B10F0B5B41EC6 /* MeetingAgentTests.xctest */,
 				11A5CC453022909800603150 /* Deep State Meeting Agent MacOS.app */,
-				11A5CC463022909800603150 /* deep-state.app */,
+				11A5CC463022909800603150 /* Deep State Meeting Agent iOS.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -135,9 +138,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		11D292EB2F64DE3B00B76594 /* deep-state */ = {
+		11D292EB2F64DE3B00B76594 /* Deep State Meeting Agent iOS */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 11D292F42F64DE3B00B76594 /* Build configuration list for PBXNativeTarget "deep-state" */;
+			buildConfigurationList = 11D292F42F64DE3B00B76594 /* Build configuration list for PBXNativeTarget "Deep State Meeting Agent iOS" */;
 			buildPhases = (
 				11D292E82F64DE3B00B76594 /* Sources */,
 				11D292E92F64DE3B00B76594 /* Frameworks */,
@@ -150,12 +153,12 @@
 			fileSystemSynchronizedGroups = (
 				11D292ED2F64DE3B00B76594 /* deep-state */,
 			);
-			name = "deep-state";
+			name = "Deep State Meeting Agent iOS";
 			packageProductDependencies = (
 				11D293022F64DE3B00B76594 /* WhisperKit */,
 			);
 			productName = "deep-state";
-			productReference = 11A5CC463022909800603150 /* deep-state.app */;
+			productReference = 11A5CC463022909800603150 /* Deep State Meeting Agent iOS.app */;
 			productType = "com.apple.product-type.application";
 		};
 		11FE81422F23393D00D6AE57 /* Deep State Meeting Agent MacOS */ = {
@@ -236,7 +239,7 @@
 			projectRoot = "";
 			targets = (
 				11FE81422F23393D00D6AE57 /* Deep State Meeting Agent MacOS */,
-				11D292EB2F64DE3B00B76594 /* deep-state */,
+				11D292EB2F64DE3B00B76594 /* Deep State Meeting Agent iOS */,
 				30C550CDFBE3B5BC79CA80D2 /* MeetingAgentTests */,
 			);
 		};
@@ -288,6 +291,7 @@
 				B752697C09EF44CF2633E9B9 /* TranscriptFormatterTests.swift in Sources */,
 				1134D9168D02127FAABC44F1 /* SummaryTemplateTests.swift in Sources */,
 				2D71FA4A39CD453FA2F5A412 /* AudioRecorderSettingsTests.swift in Sources */,
+				7411909B504CB06F58E03E9F /* MeetingRecordSectionTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -330,7 +334,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.8;
-				PRODUCT_BUNDLE_IDENTIFIER = soloai.MeetingAgentiOS;
+				PRODUCT_BUNDLE_IDENTIFIER = com.soloai.deepState;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -374,7 +378,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.8;
-				PRODUCT_BUNDLE_IDENTIFIER = soloai.MeetingAgentiOS;
+				PRODUCT_BUNDLE_IDENTIFIER = com.soloai.deepState;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -623,7 +627,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.6;
 				MARKETING_VERSION = 0.8;
-				PRODUCT_BUNDLE_IDENTIFIER = com.soloai.meetingAgentMacOS;
+				PRODUCT_BUNDLE_IDENTIFIER = com.soloai.deepState;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = NO;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -675,7 +679,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		11D292F42F64DE3B00B76594 /* Build configuration list for PBXNativeTarget "deep-state" */ = {
+		11D292F42F64DE3B00B76594 /* Build configuration list for PBXNativeTarget "Deep State Meeting Agent iOS" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				11D292F52F64DE3B00B76594 /* Debug */,
