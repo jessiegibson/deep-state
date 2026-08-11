@@ -11,7 +11,7 @@ struct OnboardingView: View {
 
     @State private var currentStep = 0
     @State private var micGranted = false
-    @State private var screenGranted = false
+    @State private var screenStatus: PermissionStatus = .notDetermined
     @State private var speechGranted = false
     @State private var calendarGranted = false
 
@@ -74,12 +74,14 @@ struct OnboardingView: View {
                 }
             }
             .padding(NBDesign.padding)
+
+            VersionFooter()
         }
         .frame(width: 480, height: 420)
         .background(NBDesign.background)
         .onAppear {
             micGranted = manager.microphonePermissionStatus() == .granted
-            screenGranted = manager.screenRecordingPermissionStatus() == .granted
+            screenStatus = manager.screenRecordingPermissionStatus()
             speechGranted = manager.speechRecognitionPermissionStatus() == .granted
             calendarGranted = CalendarManager.shared.checkStatus() == .granted
         }
@@ -123,11 +125,18 @@ struct OnboardingView: View {
             icon: "rectangle.dashed.badge.record",
             title: "SCREEN RECORDING",
             description: "Required for Screen + Audio mode.\nYou can skip this if you only plan to use Audio Only mode.",
-            isGranted: screenGranted,
+            isGranted: screenStatus == .granted,
+            // macOS only ever shows the screen-recording prompt once. After that the
+            // only route is System Settings, and the grant doesn't take effect until
+            // the app is relaunched.
+            buttonLabel: screenStatus == .denied ? "OPEN SYSTEM SETTINGS" : "GRANT PERMISSION",
+            note: screenStatus == .denied
+                ? "Enable \"Deep State Meeting Agent\" under Screen & System Audio Recording, then quit and reopen this app."
+                : nil,
             action: {
                 manager.requestScreenRecordingPermission()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                    screenGranted = manager.screenRecordingPermissionStatus() == .granted
+                    screenStatus = manager.screenRecordingPermissionStatus()
                 }
             }
         )
@@ -233,6 +242,8 @@ struct OnboardingView: View {
         title: String,
         description: String,
         isGranted: Bool,
+        buttonLabel: String = "GRANT PERMISSION",
+        note: String? = nil,
         action: @escaping () -> Void
     ) -> some View {
         VStack(spacing: 16) {
@@ -255,10 +266,17 @@ struct OnboardingView: View {
                 .font(NBDesign.buttonFont)
                 .foregroundStyle(.green)
             } else {
-                Button("GRANT PERMISSION") {
+                Button(buttonLabel) {
                     action()
                 }
                 .buttonStyle(NBButtonStyle())
+
+                if let note {
+                    Text(note)
+                        .font(NBDesign.captionFont)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(NBDesign.accent)
+                }
             }
         }
     }

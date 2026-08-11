@@ -176,6 +176,7 @@ struct IOSTranscriptView: View {
                 .padding(NBDesign.padding)
             }
             .background(NBDesign.background)
+            .safeAreaInset(edge: .bottom, spacing: 0) { VersionFooter() }
             .navigationTitle(record.displayTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

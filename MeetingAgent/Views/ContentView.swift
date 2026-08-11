@@ -52,6 +52,8 @@ struct ContentView: View {
             case .library:
                 LibraryView(manager: manager)
             }
+
+            VersionFooter()
         }
         .frame(minWidth: 640, minHeight: 480, alignment: .top)
         .background(NBDesign.background)
@@ -814,6 +816,8 @@ struct TranscriptSheetView: View {
                 .padding(NBDesign.padding)
             }
             .background(NBDesign.background)
+
+            VersionFooter()
         }
         .frame(width: 640, height: 600)
         .background(NBDesign.background)

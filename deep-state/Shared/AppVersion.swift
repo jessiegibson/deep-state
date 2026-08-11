@@ -1,0 +1,1 @@
+../../MeetingAgent/Shared/AppVersion.swift

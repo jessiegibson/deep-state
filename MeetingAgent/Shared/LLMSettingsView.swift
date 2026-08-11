@@ -97,12 +97,18 @@ struct LLMSettingsView: View {
                             .foregroundStyle(.secondary)
                         Button("RESET ONBOARDING") {
                             UserDefaults.standard.removeObject(forKey: "hasCompletedOnboarding")
+                            // Also clear the "we already asked" flag, so a fresh run of
+                            // onboarding can show the system prompt again rather than
+                            // jumping straight to System Settings.
+                            UserDefaults.standard.removeObject(forKey: "hasRequestedScreenRecording")
                         }
                         .buttonStyle(NBButtonStyle(color: NBDesign.background, textColor: NBDesign.foreground))
                     }
                 }
                 .padding(NBDesign.padding)
             }
+
+            VersionFooter()
         }
         #if os(macOS)
         .frame(width: 520, height: 640)
