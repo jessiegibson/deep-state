@@ -25,7 +25,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		11A5CC453022909800603150 /* Deep State Meeting Agent MacOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Deep State Meeting Agent MacOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		11A5CC453022909800603150 /* Deep State Meeting Agent.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Deep State Meeting Agent.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		11A5CC463022909800603150 /* deep-state.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "deep-state.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		4023EDE6698552DFBB8072A2 /* TranscriptFormatterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TranscriptFormatterTests.swift; sourceTree = "<group>"; };
 		574A487EF53B10F0B5B41EC6 /* MeetingAgentTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MeetingAgentTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -111,7 +111,7 @@
 			isa = PBXGroup;
 			children = (
 				574A487EF53B10F0B5B41EC6 /* MeetingAgentTests.xctest */,
-				11A5CC453022909800603150 /* Deep State Meeting Agent MacOS.app */,
+				11A5CC453022909800603150 /* Deep State Meeting Agent.app */,
 				11A5CC463022909800603150 /* deep-state.app */,
 			);
 			name = Products;
@@ -178,7 +178,7 @@
 				11FE81522F23398500D6AE57 /* WhisperKit */,
 			);
 			productName = MeetingAgent;
-			productReference = 11A5CC453022909800603150 /* Deep State Meeting Agent MacOS.app */;
+			productReference = 11A5CC453022909800603150 /* Deep State Meeting Agent.app */;
 			productType = "com.apple.product-type.application";
 		};
 		30C550CDFBE3B5BC79CA80D2 /* MeetingAgentTests */ = {
@@ -532,15 +532,15 @@
 				CURRENT_PROJECT_VERSION = 20260625;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = MeetingAgent/Assets.xcassets;
-				ENABLE_FILE_ACCESS_DOWNLOADS_FOLDER = readwrite;
+				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
-				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = YES;
 				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
-				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
-				ENABLE_RESOURCE_ACCESS_CAMERA = YES;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = YES;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
 				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
 				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
 				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
@@ -552,7 +552,6 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Access your calendar to automatically title recordings and suggest speaker names from attendees.";
-				INFOPLIST_KEY_NSCameraUsageDescription = "This app may use the camera for recording.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This app needs microphone access to record audio.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "This app uses Speech Recognition to create transcripts from the meeting content.";
@@ -564,7 +563,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 15.6;
 				MARKETING_VERSION = 0.8;
 				PRODUCT_BUNDLE_IDENTIFIER = com.soloai.deepState;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = "Deep State Meeting Agent";
 				REGISTER_APP_GROUPS = NO;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTED_PLATFORMS = macosx;
@@ -592,15 +591,15 @@
 				CURRENT_PROJECT_VERSION = 20260625;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = MeetingAgent/Assets.xcassets;
-				ENABLE_FILE_ACCESS_DOWNLOADS_FOLDER = readwrite;
+				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
-				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = YES;
 				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
-				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
-				ENABLE_RESOURCE_ACCESS_CAMERA = YES;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = YES;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
 				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
 				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
 				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
@@ -612,7 +611,6 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Access your calendar to automatically title recordings and suggest speaker names from attendees.";
-				INFOPLIST_KEY_NSCameraUsageDescription = "This app may use the camera for recording.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This app needs microphone access to record audio.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "This app uses Speech Recognition to create transcripts from the meeting content.";
@@ -623,8 +621,8 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.6;
 				MARKETING_VERSION = 0.8;
-				PRODUCT_BUNDLE_IDENTIFIER = com.soloai.meetingAgentMacOS;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.soloai.deepState;
+				PRODUCT_NAME = "Deep State Meeting Agent";
 				REGISTER_APP_GROUPS = NO;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTED_PLATFORMS = macosx;

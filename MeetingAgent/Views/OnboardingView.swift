@@ -14,8 +14,16 @@ struct OnboardingView: View {
     @State private var screenGranted = false
     @State private var speechGranted = false
     @State private var calendarGranted = false
+    @State private var isRequesting = false
 
     private let totalSteps = 6
+
+    /// Steps 1–4 explain a system permission before asking for it. App Review
+    /// guideline 5.1.1(iv) requires that such a screen ALWAYS leads to the system
+    /// prompt: the button must read "CONTINUE" (not "GRANT PERMISSION"), and there
+    /// must be no BACK escape hatch that lets the user dismiss the explanation
+    /// without the request firing. Rejected on 2026-08-19 for exactly that.
+    private var isPermissionStep: Bool { (1...4).contains(currentStep) }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -48,19 +56,28 @@ struct OnboardingView: View {
 
             Spacer()
 
-            // Navigation buttons
+            // Navigation buttons. No BACK: a permission explanation screen must not
+            // offer a way to back out of the request (guideline 5.1.1(iv)).
             HStack {
-                if currentStep > 0 {
-                    Button("BACK") {
-                        currentStep -= 1
-                    }
-                    .buttonStyle(NBButtonStyle(color: NBDesign.surface, textColor: NBDesign.foreground))
-                }
-
                 Spacer()
 
-                if currentStep < totalSteps - 1 {
-                    Button("NEXT") {
+                if isPermissionStep {
+                    Button("CONTINUE") {
+                        // The screen-recording request re-checks status after a delay, so
+                        // this Task is in flight long enough for a second tap to land and
+                        // advance twice, skipping a permission entirely.
+                        guard !isRequesting else { return }
+                        isRequesting = true
+                        Task {
+                            await requestPermission(forStep: currentStep)
+                            isRequesting = false
+                            currentStep += 1
+                        }
+                    }
+                    .buttonStyle(NBButtonStyle())
+                    .disabled(isRequesting)
+                } else if currentStep < totalSteps - 1 {
+                    Button("CONTINUE") {
                         currentStep += 1
                     }
                     .buttonStyle(NBButtonStyle())
@@ -108,13 +125,8 @@ struct OnboardingView: View {
         permissionStep(
             icon: "mic.fill",
             title: "MICROPHONE",
-            description: "Required to record audio during meetings.",
-            isGranted: micGranted,
-            action: {
-                Task {
-                    micGranted = await manager.requestMicrophonePermission()
-                }
-            }
+            description: "Deep State records meeting audio on this Mac so it can be saved and transcribed locally.\nmacOS will ask for your permission next.",
+            isGranted: micGranted
         )
     }
 
@@ -122,14 +134,8 @@ struct OnboardingView: View {
         permissionStep(
             icon: "rectangle.dashed.badge.record",
             title: "SCREEN RECORDING",
-            description: "Required for Screen + Audio mode.\nYou can skip this if you only plan to use Audio Only mode.",
-            isGranted: screenGranted,
-            action: {
-                manager.requestScreenRecordingPermission()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                    screenGranted = manager.screenRecordingPermissionStatus() == .granted
-                }
-            }
+            description: "Used only when you choose Screen + Audio mode, to record the screen you pick into a video file saved on your Mac.\nmacOS will ask for your permission next.",
+            isGranted: screenGranted
         )
     }
 
@@ -137,13 +143,8 @@ struct OnboardingView: View {
         permissionStep(
             icon: "waveform",
             title: "SPEECH RECOGNITION",
-            description: "Required for live transcription in Audio Only mode.",
-            isGranted: speechGranted,
-            action: {
-                Task {
-                    speechGranted = await manager.requestSpeechRecognitionPermission()
-                }
-            }
+            description: "Turns your recorded audio into a live transcript. Transcription runs on this device.\nmacOS will ask for your permission next.",
+            isGranted: speechGranted
         )
     }
 
@@ -151,14 +152,33 @@ struct OnboardingView: View {
         permissionStep(
             icon: "calendar",
             title: "CALENDAR",
-            description: "Lets the app title recordings automatically and suggest\nspeaker names from meeting attendees.",
-            isGranted: calendarGranted,
-            action: {
-                Task {
-                    calendarGranted = await CalendarManager.shared.requestAccess()
-                }
-            }
+            description: "Lets Deep State title recordings from the meeting on your calendar and suggest speaker names from its attendees.\nmacOS will ask for your permission next.",
+            isGranted: calendarGranted
         )
+    }
+
+    // MARK: - Permission Requests
+
+    /// Fires the system permission request for a step. Always called by CONTINUE,
+    /// so the explanation screen never becomes a way to avoid the prompt. Already-
+    /// granted or previously-denied permissions simply fall through — macOS does not
+    /// re-prompt after a decision, and the recorder surfaces a Settings hint at the
+    /// point the feature is actually used.
+    private func requestPermission(forStep step: Int) async {
+        switch step {
+        case 1:
+            micGranted = await manager.requestMicrophonePermission()
+        case 2:
+            manager.requestScreenRecordingPermission()
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            screenGranted = manager.screenRecordingPermissionStatus() == .granted
+        case 3:
+            speechGranted = await manager.requestSpeechRecognitionPermission()
+        case 4:
+            calendarGranted = await CalendarManager.shared.requestAccess()
+        default:
+            break
+        }
     }
 
     private var folderSelectionStep: some View {
@@ -232,8 +252,7 @@ struct OnboardingView: View {
         icon: String,
         title: String,
         description: String,
-        isGranted: Bool,
-        action: @escaping () -> Void
+        isGranted: Bool
     ) -> some View {
         VStack(spacing: 16) {
             Image(systemName: icon)
@@ -250,15 +269,10 @@ struct OnboardingView: View {
             if isGranted {
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.square.fill")
-                    Text("GRANTED")
+                    Text("ALREADY GRANTED")
                 }
                 .font(NBDesign.buttonFont)
                 .foregroundStyle(.green)
-            } else {
-                Button("GRANT PERMISSION") {
-                    action()
-                }
-                .buttonStyle(NBButtonStyle())
             }
         }
     }
