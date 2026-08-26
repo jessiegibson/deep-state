@@ -16,7 +16,7 @@
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "11FE81422F23393D00D6AE57"
                BuildableName = "Deep State Meeting Agent.app"
-               BlueprintName = "Deep State Meeting Agent"
+               BlueprintName = "Deep State Meeting Agent Desktop"
                ReferencedContainer = "container:Deep State Meeting Agent MacOS.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -32,7 +32,7 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "11FE81422F23393D00D6AE57"
             BuildableName = "Deep State Meeting Agent.app"
-            BlueprintName = "Deep State Meeting Agent"
+            BlueprintName = "Deep State Meeting Agent Desktop"
             ReferencedContainer = "container:Deep State Meeting Agent MacOS.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
@@ -65,7 +65,7 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "11FE81422F23393D00D6AE57"
             BuildableName = "Deep State Meeting Agent.app"
-            BlueprintName = "Deep State Meeting Agent"
+            BlueprintName = "Deep State Meeting Agent Desktop"
             ReferencedContainer = "container:Deep State Meeting Agent MacOS.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -82,7 +82,7 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "11FE81422F23393D00D6AE57"
             BuildableName = "Deep State Meeting Agent.app"
-            BlueprintName = "Deep State Meeting Agent"
+            BlueprintName = "Deep State Meeting Agent Desktop"
             ReferencedContainer = "container:Deep State Meeting Agent MacOS.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
