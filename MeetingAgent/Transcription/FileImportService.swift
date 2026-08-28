@@ -24,14 +24,14 @@ final class FileImportService {
     var onImportProgress: ((String) -> Void)?
     var onRetranscribingChanged: ((Bool) -> Void)?
     var onRetranscribeProgress: ((String) -> Void)?
-    var onStatus: ((String) -> Void)?
+    var onStatus: ((AppStatus) -> Void)?
     var onLibraryChanged: (() -> Void)?
 
     // MARK: - Import External Files
 
     func importFiles() async {
         guard storage.rootURL != nil else {
-            onStatus?("Select a save folder first")
+            onStatus?(.failure(.noSaveLocation))
             return
         }
 
@@ -55,7 +55,7 @@ final class FileImportService {
         onImportingChanged?(false)
         onImportProgress?("")
         onLibraryChanged?()
-        onStatus?("Imported \(urls.count) file\(urls.count == 1 ? "" : "s")")
+        onStatus?(.success("Imported \(urls.count) file\(urls.count == 1 ? "" : "s")"))
     }
 
     private func importSingleFile(fileURL: URL, index: Int, total: Int) async {
@@ -132,7 +132,7 @@ final class FileImportService {
 
     func retranscribe(record: MeetingRecord) async {
         guard record.hasAudio else {
-            onStatus?("No audio file to retranscribe")
+            onStatus?(.failure(.importFailed("No audio file to retranscribe")))
             return
         }
 
@@ -150,7 +150,7 @@ final class FileImportService {
             candidates.first { FileManager.default.fileExists(atPath: $0.path) }
         } ?? nil
         guard let audioURL else {
-            onStatus?("Audio file not found")
+            onStatus?(.failure(.importFailed("Audio file not found")))
             onRetranscribingChanged?(false)
             return
         }
@@ -171,7 +171,7 @@ final class FileImportService {
         onRetranscribingChanged?(false)
         onRetranscribeProgress?("")
         onLibraryChanged?()
-        onStatus?("Retranscription complete")
+        onStatus?(.success("Retranscription complete"))
     }
 
     func retranscribeBatch(records: [MeetingRecord]) async {
@@ -182,7 +182,7 @@ final class FileImportService {
         }
         onRetranscribingChanged?(false)
         onRetranscribeProgress?("")
-        onStatus?("Batch retranscription complete (\(records.count) files)")
+        onStatus?(.success("Batch retranscription complete (\(records.count) files)"))
     }
 
     private func replaceTranscriptSection(in existingContent: String, with newTranscript: String) -> String {
