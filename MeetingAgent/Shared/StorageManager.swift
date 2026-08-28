@@ -149,6 +149,19 @@ class StorageManager: ObservableObject {
         defer { url.stopAccessingSecurityScopedResource() }
         return try body()
     }
+
+    /// Async counterpart, for work that must hold the security scope across an
+    /// `await` — decoding frames out of a saved video, for instance. Deliberately a
+    /// separate name rather than an `async` overload: an overload pair that differs
+    /// only in effects is easy to resolve to the wrong one by accident.
+    func withScopedAccessAsync<T>(_ body: () async throws -> T) async rethrows -> T? {
+        guard storageMode == .local, let url = localBookmarkURL else {
+            return try await body()
+        }
+        guard url.startAccessingSecurityScopedResource() else { return nil }
+        defer { url.stopAccessingSecurityScopedResource() }
+        return try await body()
+    }
     #endif
 
     // MARK: - Save Meeting	
@@ -161,7 +174,8 @@ class StorageManager: ObservableObject {
         title: String,
         notes: String,
         audioURL: URL? = nil,
-        videoURL: URL? = nil
+        videoURL: URL? = nil,
+        screenshots: ScreenshotPayload? = nil
     ) throws -> URL {
         guard let root = rootURL else {
             throw StorageError.noSaveLocation
@@ -201,7 +215,80 @@ class StorageManager: ObservableObject {
             try FileManager.default.copyItem(at: videoURL, to: meetingFolder.appendingPathComponent("video.mov"))
         }
 
+        if let screenshots {
+            fileScreenshots(screenshots, into: meetingFolder, folderName: timestamp)
+        }
+
         return meetingFolder
+    }
+
+    /// Staged screenshots plus the manifest describing them. The manifest arrives with
+    /// an empty `folderName` — only this type knows the timestamp it picks — and is
+    /// stamped here before being written.
+    struct ScreenshotPayload {
+        var files: [URL]
+        var manifest: ScreenshotManifest
+
+        init(files: [URL], manifest: ScreenshotManifest) {
+            self.files = files
+            self.manifest = manifest
+        }
+    }
+
+    /// Moves staged screenshots into `<meeting>/screenshots/` and writes
+    /// `screenshots.json` beside the transcript.
+    ///
+    /// Deliberately non-throwing. Screenshots are a supplement to a recording, never
+    /// the reason to lose one: a frame that will not move is dropped from the manifest
+    /// and logged, and the meeting still saves with its audio, video and transcript
+    /// intact.
+    private func fileScreenshots(_ payload: ScreenshotPayload, into meetingFolder: URL, folderName: String) {
+        guard !payload.files.isEmpty else { return }
+
+        let fm = FileManager.default
+        let destination = meetingFolder.appendingPathComponent("screenshots", isDirectory: true)
+        do {
+            try fm.createDirectory(at: destination, withIntermediateDirectories: true)
+        } catch {
+            print("[StorageManager] could not create screenshots folder: \(error)")
+            return
+        }
+
+        var landed = Set<String>()
+        for source in payload.files {
+            let target = destination.appendingPathComponent(source.lastPathComponent)
+            do {
+                // Move, not copy: the source is a temp file we own and are done with.
+                try fm.moveItem(at: source, to: target)
+                landed.insert(source.lastPathComponent)
+            } catch {
+                // A move across volumes (temp dir and save folder on different disks,
+                // or an iCloud container) fails where a copy succeeds.
+                do {
+                    try fm.copyItem(at: source, to: target)
+                    landed.insert(source.lastPathComponent)
+                    try? fm.removeItem(at: source)
+                } catch {
+                    print("[StorageManager] screenshot \(source.lastPathComponent) could not be filed: \(error)")
+                }
+            }
+        }
+
+        var manifest = payload.manifest
+        manifest.meeting.folderName = folderName
+        // The manifest must describe what is actually on disk, not what was intended.
+        manifest.screenshots = manifest.screenshots.filter {
+            landed.contains(($0.file as NSString).lastPathComponent)
+        }
+
+        guard !manifest.screenshots.isEmpty else { return }
+
+        do {
+            let data = try ScreenshotManifest.encoder().encode(manifest)
+            try data.write(to: meetingFolder.appendingPathComponent("screenshots.json"), options: .atomic)
+        } catch {
+            print("[StorageManager] screenshots.json could not be written: \(error)")
+        }
     }
 
     // MARK: - Load Library
@@ -235,6 +322,9 @@ class StorageManager: ObservableObject {
         let hasAudio = fm.fileExists(atPath: folderURL.appendingPathComponent("audio.m4a").path)
             || fm.fileExists(atPath: folderURL.appendingPathComponent("audio.wav").path)
         let hasVideo = fm.fileExists(atPath: folderURL.appendingPathComponent("video.mov").path)
+        let screenshotCount = (try? fm.contentsOfDirectory(
+            atPath: folderURL.appendingPathComponent("screenshots").path
+        ))?.count ?? 0
 
         let transcriptURL = folderURL.appendingPathComponent("transcript.md")
         var title: String? = nil
@@ -253,7 +343,8 @@ class StorageManager: ObservableObject {
             date: date,
             hasAudio: hasAudio,
             hasVideo: hasVideo,
-            transcriptContent: content
+            transcriptContent: content,
+            screenshotCount: screenshotCount
         )
     }
 

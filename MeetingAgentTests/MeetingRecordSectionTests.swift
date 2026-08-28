@@ -82,4 +82,31 @@ final class MeetingRecordSectionTests: XCTestCase {
         XCTAssertEqual(r.displayTranscript, r.transcriptBody)
         XCTAssertNotEqual(r.displayTranscript, r.transcriptContent)
     }
+
+    // MARK: - Screenshots
+
+    /// `screenshotCount` was added behind an explicit initializer specifically so the
+    /// seven-argument form above keeps compiling. This asserts that, and the default.
+    func testScreenshotCountDefaultsToZero() {
+        let r = record(full)
+        XCTAssertEqual(r.screenshotCount, 0)
+        XCTAssertFalse(r.hasScreenshots)
+    }
+
+    func testScreenshotPathsHangOffTheMeetingFolder() {
+        let r = MeetingRecord(
+            folderURL: URL(fileURLWithPath: "/tmp/2026-03-08 14-30-00"),
+            folderName: "2026-03-08 14-30-00",
+            title: nil,
+            date: Date(timeIntervalSince1970: 0),
+            hasAudio: true,
+            hasVideo: true,
+            transcriptContent: nil,
+            screenshotCount: 12
+        )
+        XCTAssertTrue(r.hasScreenshots)
+        XCTAssertEqual(r.screenshotsFolderURL.lastPathComponent, "screenshots")
+        XCTAssertEqual(r.screenshotManifestURL.lastPathComponent, "screenshots.json")
+        XCTAssertEqual(r.screenshotsFolderURL.deletingLastPathComponent().path, r.folderURL.path)
+    }
 }
