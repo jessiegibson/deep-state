@@ -265,9 +265,9 @@ struct RecordingView: View {
             } else {
                 VStack {
                     Spacer()
-                    Text(manager.statusMessage.uppercased())
+                    Text(manager.status.message.uppercased())
                         .font(NBDesign.bodyFont)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(statusColor(manager.status.severity))
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
                     Spacer()
@@ -463,6 +463,18 @@ struct RecordingView: View {
             .overlay(Rectangle().stroke(NBDesign.border, lineWidth: NBDesign.thinBorder))
         }
     }
+
+    /// Status text colour by severity. A failure and a "Saved" must not read the
+    /// same — that was the practical cost of the old single-String status channel.
+    private func statusColor(_ severity: AppStatus.Severity) -> Color {
+        switch severity {
+        case .neutral: return .secondary
+        case .active:  return .secondary
+        case .success: return NBDesign.foreground
+        case .failure: return NBDesign.accent
+        }
+    }
+
 }
 
 // MARK: - Library View
