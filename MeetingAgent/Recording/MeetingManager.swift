@@ -2,7 +2,6 @@
 import SwiftUI
 import ScreenCaptureKit
 import WhisperKit
-import Combine
 import AVFoundation
 import UniformTypeIdentifiers
 import EventKit
@@ -16,50 +15,72 @@ enum PermissionStatus {
     case granted, denied, notDetermined
 }
 
+/// Central view model. `@Observable` rather than `ObservableObject`: SwiftUI then
+/// tracks the individual properties a view actually reads, instead of redrawing
+/// every observer on any `objectWillChange`. NSObject is gone with it — nothing here
+/// conforms to an Objective-C protocol any more (the capture delegates live on
+/// `ScreenRecorder`), so the inheritance was pure legacy.
 @MainActor
-class MeetingManager: NSObject, ObservableObject {
-    @Published var isRecording = false
+@Observable
+class MeetingManager {
+    var isRecording = false
     /// Structured status channel. Read `.message` for text, `.severity` for styling,
     /// and `.failure` to branch on a specific error category.
-    @Published var status: AppStatus = .idle
-    @Published var recordingMode: RecordingMode = .audioOnly
+    var status: AppStatus = .idle
+    var recordingMode: RecordingMode = .audioOnly
 
     // Screen picker (only relevant in .screenAndAudio mode with multiple displays)
-    @Published var availableDisplays: [DisplayOption] = []
-    @Published var selectedDisplayID: CGDirectDisplayID?
+    var availableDisplays: [DisplayOption] = []
+    var selectedDisplayID: CGDirectDisplayID?
 
     let storage = StorageManager.shared
     /// Convenience accessor — views that read savedFolderURL continue to work.
     var savedFolderURL: URL? { storage.rootURL }
 
     // Preferences
-    @Published var shouldRecordCamera: Bool = UserDefaults.standard.bool(forKey: "pref_record_camera") {
-        didSet { UserDefaults.standard.set(shouldRecordCamera, forKey: "pref_record_camera") }
+    /// Hand-written rather than a plain stored property: `@Observable` rewrites
+    /// stored properties into computed ones, which leaves no room for a `didSet`.
+    /// This is Apple's documented shape for a computed property that still
+    /// participates in observation.
+    @ObservationIgnored
+    private var _shouldRecordCamera: Bool = UserDefaults.standard.bool(forKey: "pref_record_camera")
+
+    var shouldRecordCamera: Bool {
+        get {
+            access(keyPath: \.shouldRecordCamera)
+            return _shouldRecordCamera
+        }
+        set {
+            withMutation(keyPath: \.shouldRecordCamera) {
+                _shouldRecordCamera = newValue
+                UserDefaults.standard.set(newValue, forKey: "pref_record_camera")
+            }
+        }
     }
-    @Published var shouldRecordSystemAudio: Bool = true
+    var shouldRecordSystemAudio: Bool = true
     /// Whether to capture the mic alongside a screen recording. See
     /// `startMicrophoneAlongsideScreen()` — this is a separate `AVAudioEngine` tap,
     /// NOT `SCStreamConfiguration.captureMicrophone` (which is unusable here).
-    @Published var shouldRecordMicrophone: Bool = true
+    var shouldRecordMicrophone: Bool = true
 
     // LLM settings accessor (passed to LLMSettingsView). Summarization itself lives
     // in TranscriptViewModel — MeetingManager only exposes the shared settings object.
     let llmSettings = LLMSettings.shared
 
     // Calendar integration
-    @Published var calendarAttendees: [String] = []
+    var calendarAttendees: [String] = []
 
     // Import & retranscribe
-    @Published var isImporting = false
-    @Published var importProgress = ""
-    @Published var isRetranscribing = false
-    @Published var retranscribeProgress = ""
+    var isImporting = false
+    var importProgress = ""
+    var isRetranscribing = false
+    var retranscribeProgress = ""
 
     private let screenRecorder = ScreenRecorder()
     private var lastRecordingURL: URL?
     /// Guards against a second STOP while finalization is still in flight — two
     /// concurrent stops race on the same stream and corrupt the recording.
-    @Published private(set) var isStopping = false
+    private(set) var isStopping = false
     private let whisperTranscriber = WhisperTranscriber()
 
     // Audio-only capture + file import helpers
@@ -74,22 +95,20 @@ class MeetingManager: NSObject, ObservableObject {
     private var screenMicURL: URL?
     /// Why the mic isn't being captured, when it isn't. Surfaced in the status line so
     /// a silent recording is never a surprise discovered after the meeting.
-    @Published private(set) var micStatusNote: String?
+    private(set) var micStatusNote: String?
 
     // Voice Visualizer Properties
-    @Published var amplitudes: [CGFloat] = Array(repeating: 0.1, count: 5)
+    var amplitudes: [CGFloat] = Array(repeating: 0.1, count: 5)
     private let ambientMonitor = AmbientLevelMonitor()
-    @Published var isPaused = false
-    @Published var isNotesSheetOpen = false
-    @Published var meetingNotes = ""
-    @Published var meetingTitle = ""
-    @Published var meetingLibrary: [MeetingRecord] = []
+    var isPaused = false
+    var isNotesSheetOpen = false
+    var meetingNotes = ""
+    var meetingTitle = ""
+    var meetingLibrary: [MeetingRecord] = []
     private var recordingSegments: [URL] = []
     private var segmentCounter = 0
 
-    override init() {
-        super.init()
-
+    init() {
         print("MeetingManager init started")
 
         // Idle visualizer levels flow back into our published amplitudes.
