@@ -56,11 +56,20 @@ final class ScreenRecorder: NSObject, SCStreamDelegate, SCRecordingOutputDelegat
     static func availableDisplays() async throws -> [DisplayOption] {
         let content = try await SCShareableContent.current
         return content.displays.map { display in
-            let name = NSScreen.screens.first {
-                ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value == display.displayID
-            }?.localizedName ?? "Display"
-            return DisplayOption(id: display.displayID, name: name, width: Int(display.width), height: Int(display.height))
+            DisplayOption(id: display.displayID,
+                          name: localizedName(for: display.displayID),
+                          width: Int(display.width),
+                          height: Int(display.height))
         }
+    }
+
+    /// The system's name for a display ("Built-in Retina Display"), matched through
+    /// `NSScreen`. Falls back to a generic label when the id no longer matches a
+    /// connected screen. Also used to label screenshots in the manifest.
+    static func localizedName(for displayID: CGDirectDisplayID) -> String {
+        NSScreen.screens.first {
+            ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value == displayID
+        }?.localizedName ?? "Display"
     }
 
     /// The display currently containing the app's key window, if determinable —
@@ -70,6 +79,30 @@ final class ScreenRecorder: NSObject, SCStreamDelegate, SCRecordingOutputDelegat
               let screenNumber = (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value
         else { return options.first?.id }
         return options.first { $0.id == screenNumber }?.id ?? options.first?.id
+    }
+
+    /// Resolves a display and builds a content filter that excludes this app's own
+    /// windows.
+    ///
+    /// Shared by `startCapture` and `ScreenshotCapture` so a recording and a screenshot
+    /// of the same moment see exactly the same thing. The exclusion is the point: with
+    /// it, neither a captured frame nor a recorded one contains the recorder UI that
+    /// produced it.
+    ///
+    /// Returns the `SCDisplay` alongside the filter because callers need its
+    /// dimensions — the stream for its configuration, screenshots for the manifest.
+    static func makeContentFilter(displayID: CGDirectDisplayID?) async throws -> (SCContentFilter, SCDisplay) {
+        let content = try await SCShareableContent.current
+        guard let display = content.displays.first(where: { $0.displayID == displayID })
+            ?? content.displays.first else {
+            throw NSError(domain: "ScreenRecorder", code: 2,
+                          userInfo: [NSLocalizedDescriptionKey: "No display found"])
+        }
+
+        let excludedWindows = content.windows.filter {
+            $0.owningApplication?.bundleIdentifier == Bundle.main.bundleIdentifier
+        }
+        return (SCContentFilter(display: display, excludingWindows: excludedWindows), display)
     }
 
     /// Begins capturing the main display to `url`.
@@ -90,17 +123,7 @@ final class ScreenRecorder: NSObject, SCStreamDelegate, SCRecordingOutputDelegat
         didFinishRecording = false
         recordingFailure = nil
 
-        let content = try await SCShareableContent.current
-        guard let display = content.displays.first(where: { $0.displayID == selectedDisplayID })
-            ?? content.displays.first else {
-            throw NSError(domain: "ScreenRecorder", code: 2,
-                          userInfo: [NSLocalizedDescriptionKey: "No display found"])
-        }
-
-        let excludedWindows = content.windows.filter {
-            $0.owningApplication?.bundleIdentifier == Bundle.main.bundleIdentifier
-        }
-        let filter = SCContentFilter(display: display, excludingWindows: excludedWindows)
+        let (filter, display) = try await Self.makeContentFilter(displayID: selectedDisplayID)
 
         let config = SCStreamConfiguration()
         config.width = Int(display.width)
