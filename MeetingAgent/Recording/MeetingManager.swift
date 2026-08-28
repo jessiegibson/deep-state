@@ -85,12 +85,6 @@ class MeetingManager: NSObject, ObservableObject {
     private var recordingSegments: [URL] = []
     private var segmentCounter = 0
 
-    func checkPermissions() {
-        if let message = PermissionsService.requestStartupPermissions() {
-            statusMessage = message
-        }
-    }
-
     override init() {
         super.init()
 
@@ -145,12 +139,14 @@ class MeetingManager: NSObject, ObservableObject {
 
         // StorageManager.shared handles folder resolution (iCloud or local bookmark)
         print("Folder loaded")
-        
-        // 1. Check permissions immediately on startup
-        checkPermissions()
-        print("Permissions check completed")
-        
-        // 2. Start loading the AI model in the background
+
+        // No permission requests here. Mic and screen access are asked for at the
+        // moment the feature is used (onboarding's GRANT buttons, or the start of a
+        // recording), never at launch — a user who has not touched anything yet has
+        // no idea what the prompt is for, and App Review reads a cold-start TCC
+        // prompt as an unjustified request.
+
+        // Start loading the AI model in the background.
         Task { await setupEngine() }
         print("WhisperKit setup started")
         
@@ -251,12 +247,7 @@ class MeetingManager: NSObject, ObservableObject {
     /// prompt isn't captured into the recording. Returns whether the mic may be used.
     private func resolveMicrophonePermission() async -> Bool {
         guard shouldRecordMicrophone else { return false }
-        var status = AVCaptureDevice.authorizationStatus(for: .audio)
-        if status == .notDetermined {
-            _ = await AVCaptureDevice.requestAccess(for: .audio)
-            status = AVCaptureDevice.authorizationStatus(for: .audio)
-        }
-        return status == .authorized
+        return await PermissionsService.ensureMicrophoneAccess() == .granted
     }
 
     /// Starts a microphone capture that runs in parallel with the ScreenCaptureKit
@@ -673,12 +664,12 @@ class MeetingManager: NSObject, ObservableObject {
     private func startAudioOnly() async {
         statusMessage = "Starting audio recording..."
 
-        let micStatus = AVCaptureDevice.authorizationStatus(for: .audio)
-        guard micStatus == .authorized else {
-            if micStatus == .notDetermined {
-                AVCaptureDevice.requestAccess(for: .audio) { _ in }
-            }
-            statusMessage = "Microphone access required."
+        // Ask for the mic here, at the point the user pressed RECORD, and wait for
+        // the answer. The old code fired the request without awaiting it and then
+        // read a status that was still .notDetermined, so granting access still
+        // produced an error message and a recording that never started.
+        guard await PermissionsService.ensureMicrophoneAccess() == .granted else {
+            statusMessage = "Microphone access denied — enable it in System Settings → Privacy & Security → Microphone."
             return
         }
 
