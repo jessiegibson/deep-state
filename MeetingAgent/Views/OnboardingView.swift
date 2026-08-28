@@ -11,7 +11,7 @@ struct OnboardingView: View {
 
     @State private var currentStep = 0
     @State private var micGranted = false
-    @State private var screenGranted = false
+    @State private var screenStatus: PermissionStatus = .notDetermined
     @State private var speechGranted = false
     @State private var calendarGranted = false
     @State private var isRequesting = false
@@ -91,12 +91,14 @@ struct OnboardingView: View {
                 }
             }
             .padding(NBDesign.padding)
+
+            VersionFooter()
         }
         .frame(width: 480, height: 420)
         .background(NBDesign.background)
         .onAppear {
             micGranted = manager.microphonePermissionStatus() == .granted
-            screenGranted = manager.screenRecordingPermissionStatus() == .granted
+            screenStatus = manager.screenRecordingPermissionStatus()
             speechGranted = manager.speechRecognitionPermissionStatus() == .granted
             calendarGranted = CalendarManager.shared.checkStatus() == .granted
         }
@@ -252,7 +254,10 @@ struct OnboardingView: View {
         icon: String,
         title: String,
         description: String,
-        isGranted: Bool
+        isGranted: Bool,
+        buttonLabel: String = "GRANT PERMISSION",
+        note: String? = nil,
+        action: @escaping () -> Void
     ) -> some View {
         VStack(spacing: 16) {
             Image(systemName: icon)

@@ -438,6 +438,56 @@ switching profiles — this never reproduces on the built-in mic.
 
 ---
 
+### L15b. The L15 fix bailed out mid-recovery and killed the tap permanently — FIXED 2026-08-10
+
+Observed 2026-08-10 11:54:37, one recording lost:
+
+```
+AVAudioEngineGraph.mm:504  Error, formats don't match!
+  Input HW format: <AVAudioFormat 1 ch, 16000 Hz, Float32>
+  tap format:      <AVAudioFormat 1 ch, 44100 Hz, Float32>
+```
+
+**Symptom.** Recording completes with no error dialog, but the saved folder contains
+`audio.wav` (not `audio.m4a`) and the transcript reads
+`_Transcript unavailable. Audio saved as WAV._`
+
+**Cause.** `handleConfigurationChange()` did its work in this order: stop the engine →
+**remove the tap** → read `outputFormat(forBus: 0)` → `guard sampleRate > 0 else { return }`.
+An A2DP→HFP switch is not atomic, and the input node transiently reports 0 Hz while it is in
+flight. That early return therefore fired *after* the tap was already removed and the engine
+already stopped, and nothing ever reinstalled either — audio capture was dead for the rest of
+the session. The WAV kept only the handful of pre-switch frames, `AVAssetExportSession`
+rejected it in `convertToM4A`, and `stopAudioOnly()` fell into its
+"conversion failed, save the raw WAV" branch. **The user-visible failure is a missing
+transcript; the audio path is where it actually broke.**
+
+**Fix.** `handleConfigurationChange()` now tears down once and delegates to
+`restoreTap(attempt:)`, which retries on a 100 ms backoff (50 attempts ≈ 5 s) and installs
+only once `inputFormat(forBus:)` and `outputFormat(forBus:)` agree on sample rate *and*
+channel count. Requiring that agreement is what prevents the "formats don't match" tap in the
+first place — a nonzero sample rate alone was never sufficient.
+
+**Do not** re-simplify `restoreTap` back into a single-shot `guard … else { return }`. The
+retry *is* the fix; a one-shot check reproduces this exactly.
+
+**Note for triage.** This recording also logged the L1 `audioanalyticsd` PRECONDITION FAILURE
+plus `HALC_ProxyObjectMap` / `HALC_ShellDevice` / `throwing -10877`. Those are benign sandbox
+telemetry and device-enumeration noise, they appear on healthy runs, and they are **not**
+related to this bug. Do not chase them, and do not disable the sandbox to silence them — see
+L1 and the App Store note below.
+
+**App Store constraint (added 2026-08-10).** `com.apple.security.app-sandbox` is **required**
+for Mac App Store and macOS TestFlight distribution. L1's old advice — "if the precondition
+appears, set `ENABLE_APP_SANDBOX = NO`" — is a local debugging workaround only; shipping that
+way forfeits App Store Connect entirely. The sandbox stays on.
+
+**Guard:** QA with a Bluetooth headset, and confirm the saved folder contains `audio.m4a`
+with a real transcript — not `audio.wav`. Seeing `audio.wav` in the library *is* the
+regression signal.
+
+---
+
 ### L16. `Image("Inner Robot Eye 1")` — appiconset members are not named images — FIXED 2026-08-04
 
 ```

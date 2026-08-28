@@ -106,10 +106,25 @@ struct IOSTranscriptView: View {
                         .nbCard()
                     }
 
+                    // Meeting notes (only written when the user took notes)
+                    if let notes = record.meetingNotes {
+                        VStack(alignment: .leading, spacing: NBDesign.smallPadding) {
+                            NBSectionHeader(title: "MEETING NOTES", copyText: notes)
+                            Text(notes)
+                                .font(NBDesign.bodyFont)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+
                     // Transcript
-                    Text(record.transcriptContent ?? "No transcript available")
-                        .font(NBDesign.bodyFont)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    VStack(alignment: .leading, spacing: NBDesign.smallPadding) {
+                        NBSectionHeader(title: "TRANSCRIPT", copyText: record.displayTranscript)
+                        Text(record.displayTranscript ?? "No transcript available")
+                            .font(NBDesign.bodyFont)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
 
                     // Summarize
                     VStack(alignment: .leading, spacing: NBDesign.smallPadding) {
@@ -144,16 +159,24 @@ struct IOSTranscriptView: View {
                             Text(error).font(NBDesign.captionFont).foregroundStyle(NBDesign.accent)
                         }
                         if let summary = vm.summaryResult {
-                            Text(summary)
-                                .font(NBDesign.bodyFont)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .nbCard()
+                            VStack(alignment: .leading, spacing: 4) {
+                                NBSectionHeader(
+                                    title: "SUMMARY (\(vm.selectedTemplate.rawValue.uppercased()))",
+                                    copyText: summary
+                                )
+                                Text(summary)
+                                    .font(NBDesign.bodyFont)
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .nbCard()
                         }
                     }
                 }
                 .padding(NBDesign.padding)
             }
             .background(NBDesign.background)
+            .safeAreaInset(edge: .bottom, spacing: 0) { VersionFooter() }
             .navigationTitle(record.displayTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

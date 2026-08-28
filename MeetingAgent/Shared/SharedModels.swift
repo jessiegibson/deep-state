@@ -31,4 +31,33 @@ struct MeetingRecord: Identifiable {
         formatter.dateFormat = "MMM d, yyyy  h:mm a"
         return formatter.string(from: date)
     }
+
+    // MARK: - transcript.md sections
+    // transcript.md is written by StorageManager as `---`-separated sections:
+    // title/date, optional `## Meeting Notes`, `## Transcript`, and — once the
+    // user runs a summary — an appended `## Summary (...)`. Views want the
+    // sections individually so the copy buttons yield the spoken text rather
+    // than the surrounding markdown scaffolding.
+
+    var meetingNotes: String? { section(after: "## Meeting Notes") }
+
+    var transcriptBody: String? { section(after: "## Transcript") }
+
+    /// Transcript text for display and copying. Falls back to the whole file for
+    /// records written before this layout, or by anything that skipped the header.
+    var displayTranscript: String? { transcriptBody ?? transcriptContent }
+
+    /// Returns the text between `marker` and the next `---` divider (or end of file).
+    private func section(after marker: String) -> String? {
+        guard let content = transcriptContent,
+              let markerRange = content.range(of: marker) else { return nil }
+
+        var body = content[markerRange.upperBound...]
+        if let divider = body.range(of: "\n---\n") {
+            body = body[body.startIndex..<divider.lowerBound]
+        }
+
+        let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
 }

@@ -52,8 +52,10 @@ struct ContentView: View {
             case .library:
                 LibraryView(manager: manager)
             }
+
+            VersionFooter()
         }
-        .frame(minWidth: 640, minHeight: 480)
+        .frame(minWidth: 640, minHeight: 480, alignment: .top)
         .background(NBDesign.background)
     }
 
@@ -92,6 +94,28 @@ struct RecordingView: View {
     }
 
     var body: some View {
+        GeometryReader { proxy in
+            ScrollView(.vertical) {
+                recorderContent
+                    .padding(NBDesign.padding)
+                    .frame(
+                        maxWidth: .infinity,
+                        minHeight: proxy.size.height,
+                        alignment: .topLeading
+                    )
+            }
+            .scrollBounceBehavior(.basedOnSize)
+        }
+        .onChange(of: calendar.shouldAutoStart) { _, firing in
+            guard firing, !manager.isRecording else { return }
+            calendar.shouldAutoStart = false
+            Task {
+                await manager.start()
+            }
+        }
+    }
+
+    private var recorderContent: some View {
         VStack(alignment: .leading, spacing: NBDesign.padding) {
 
             // Recording Mode Picker
@@ -223,6 +247,7 @@ struct RecordingView: View {
 
                     VoiceVisualizer(amplitudes: manager.amplitudes)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                 .transition(.opacity)
             } else if manager.isImporting {
                 VStack(spacing: NBDesign.smallPadding) {
@@ -236,7 +261,7 @@ struct RecordingView: View {
                         .frame(maxWidth: .infinity)
                     Spacer()
                 }
-                .frame(minHeight: 60)
+                .frame(maxWidth: .infinity, minHeight: 60, maxHeight: .infinity)
             } else {
                 VStack {
                     Spacer()
@@ -247,7 +272,7 @@ struct RecordingView: View {
                         .frame(maxWidth: .infinity)
                     Spacer()
                 }
-                .frame(minHeight: 60)
+                .frame(maxWidth: .infinity, minHeight: 60, maxHeight: .infinity)
             }
 
             // Inline Notes Panel
@@ -327,14 +352,6 @@ struct RecordingView: View {
                     .disabled(manager.isImporting)
                 }
                 Spacer()
-            }
-        }
-        .padding(NBDesign.padding)
-        .onChange(of: calendar.shouldAutoStart) { _, firing in
-            guard firing, !manager.isRecording else { return }
-            calendar.shouldAutoStart = false
-            Task {
-                await manager.start()
             }
         }
     }
@@ -441,7 +458,7 @@ struct RecordingView: View {
                         .allowsHitTesting(false)
                 }
             }
-            .frame(height: 72)
+            .frame(minHeight: 72, maxHeight: 240)
             .background(NBDesign.background)
             .overlay(Rectangle().stroke(NBDesign.border, lineWidth: NBDesign.thinBorder))
         }
@@ -718,10 +735,25 @@ struct TranscriptSheetView: View {
                         .nbCard()
                     }
 
+                    // Meeting notes (only written when the user took notes)
+                    if let notes = record.meetingNotes {
+                        VStack(alignment: .leading, spacing: NBDesign.smallPadding) {
+                            NBSectionHeader(title: "MEETING NOTES", copyText: notes)
+                            Text(notes)
+                                .font(NBDesign.bodyFont)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+
                     // Transcript content
-                    Text(record.transcriptContent ?? "No transcript available")
-                        .font(NBDesign.bodyFont)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    VStack(alignment: .leading, spacing: NBDesign.smallPadding) {
+                        NBSectionHeader(title: "TRANSCRIPT", copyText: record.displayTranscript)
+                        Text(record.displayTranscript ?? "No transcript available")
+                            .font(NBDesign.bodyFont)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
 
                     // Summarize section
                     VStack(alignment: .leading, spacing: NBDesign.smallPadding) {
@@ -768,11 +800,13 @@ struct TranscriptSheetView: View {
 
                         if let summary = vm.summaryResult {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("SUMMARY (\(vm.selectedTemplate.rawValue.uppercased()))")
-                                    .font(NBDesign.captionFont)
-                                    .foregroundStyle(.secondary)
+                                NBSectionHeader(
+                                    title: "SUMMARY (\(vm.selectedTemplate.rawValue.uppercased()))",
+                                    copyText: summary
+                                )
                                 Text(summary)
                                     .font(NBDesign.bodyFont)
+                                    .textSelection(.enabled)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                             }
                             .nbCard()
@@ -782,6 +816,8 @@ struct TranscriptSheetView: View {
                 .padding(NBDesign.padding)
             }
             .background(NBDesign.background)
+
+            VersionFooter()
         }
         .frame(width: 640, height: 600)
         .background(NBDesign.background)

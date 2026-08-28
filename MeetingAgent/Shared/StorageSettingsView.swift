@@ -37,6 +37,8 @@ struct StorageSettingsView: View {
                 }
                 .padding(NBDesign.padding)
             }
+
+            VersionFooter()
         }
         #if os(macOS)
         .frame(minWidth: 400, minHeight: 300)

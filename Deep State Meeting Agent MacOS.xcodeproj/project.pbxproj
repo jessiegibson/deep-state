@@ -11,6 +11,7 @@
 		11D293012F64DE3B00B76594 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 11D293022F64DE3B00B76594 /* WhisperKit */; };
 		11FE81532F23398500D6AE57 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 11FE81522F23398500D6AE57 /* WhisperKit */; };
 		2D71FA4A39CD453FA2F5A412 /* AudioRecorderSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F608AEBE50DF7C39E657B667 /* AudioRecorderSettingsTests.swift */; };
+		7411909B504CB06F58E03E9F /* MeetingRecordSectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8DEA4275438256ED7FEA48A /* MeetingRecordSectionTests.swift */; };
 		B752697C09EF44CF2633E9B9 /* TranscriptFormatterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4023EDE6698552DFBB8072A2 /* TranscriptFormatterTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -25,10 +26,11 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		1172AB1A303E26FD0045E4A7 /* Deep State Meeting Agent.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Deep State Meeting Agent.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		1172AB1A303E26FD0045E4A7 /* Deep State Meeting Agent Desktop.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Deep State Meeting Agent.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		11A5CC463022909800603150 /* Deep State Meeting Agent Mobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = "Deep State Meeting Agent Mobile.app"; path = "/Users/jag/workspace/github.com/jessiegibson/MeetingAgent/MeetingAgent/build/Debug-iphoneos/Deep State Meeting Agent Mobile.app"; sourceTree = "<absolute>"; };
 		4023EDE6698552DFBB8072A2 /* TranscriptFormatterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TranscriptFormatterTests.swift; sourceTree = "<group>"; };
 		574A487EF53B10F0B5B41EC6 /* MeetingAgentTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MeetingAgentTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B8DEA4275438256ED7FEA48A /* MeetingRecordSectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingRecordSectionTests.swift; sourceTree = "<group>"; };
 		B9BE699DDE809F2A9D50F2D4 /* SummaryTemplateTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SummaryTemplateTests.swift; sourceTree = "<group>"; };
 		F608AEBE50DF7C39E657B667 /* AudioRecorderSettingsTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AudioRecorderSettingsTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -92,6 +94,7 @@
 				4023EDE6698552DFBB8072A2 /* TranscriptFormatterTests.swift */,
 				B9BE699DDE809F2A9D50F2D4 /* SummaryTemplateTests.swift */,
 				F608AEBE50DF7C39E657B667 /* AudioRecorderSettingsTests.swift */,
+				B8DEA4275438256ED7FEA48A /* MeetingRecordSectionTests.swift */,
 			);
 			path = MeetingAgentTests;
 			sourceTree = "<group>";
@@ -287,6 +290,7 @@
 				B752697C09EF44CF2633E9B9 /* TranscriptFormatterTests.swift in Sources */,
 				1134D9168D02127FAABC44F1 /* SummaryTemplateTests.swift in Sources */,
 				2D71FA4A39CD453FA2F5A412 /* AudioRecorderSettingsTests.swift in Sources */,
+				7411909B504CB06F58E03E9F /* MeetingRecordSectionTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -563,7 +567,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.6;
 				MARKETING_VERSION = 0.8;
-				PRODUCT_BUNDLE_IDENTIFIER = com.cdpconsultant.deepState;
+				PRODUCT_BUNDLE_IDENTIFIER = com.soloai.deepState;
 				PRODUCT_NAME = "Deep State Meeting Agent";
 				REGISTER_APP_GROUPS = NO;
 				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
@@ -629,9 +633,9 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.6;
-				MARKETING_VERSION = 0.8;
-				PRODUCT_BUNDLE_IDENTIFIER = com.cdpconsultant.deepState;
-				PRODUCT_NAME = "Deep State Meeting Agent";
+	cd			MARKETING_VERSION = 0.8;
+				PRODUCT_BUNDLE_IDENTIFIER = com.soloai.deepState;
+				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = NO;
 				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
 				RUNTIME_EXCEPTION_ALLOW_JIT = NO;

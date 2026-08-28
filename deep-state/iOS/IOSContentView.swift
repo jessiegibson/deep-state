@@ -44,6 +44,8 @@ struct IOSContentView: View {
             case .library:
                 IOSLibraryView(manager: manager)
             }
+
+            VersionFooter()
         }
         .background(NBDesign.background)
         .sheet(isPresented: $isSettingsOpen) {

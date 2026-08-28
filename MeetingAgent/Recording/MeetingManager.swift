@@ -181,6 +181,13 @@ class MeetingManager: NSObject, ObservableObject {
             }
         } catch {
             print("Failed to list displays: \(error)")
+            // -3801 is TCC refusing screen capture. It's silent otherwise — the
+            // picker just shows an empty list with no explanation.
+            if (error as NSError).code == -3801 {
+                availableDisplays = []
+                PermissionsService.hasRequestedScreenRecording = true
+                statusMessage = "Screen Recording permission denied — enable it in System Settings, then relaunch."
+            }
         }
     }
 

@@ -2,6 +2,16 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- REQUIRED: the Mac App Store and macOS TestFlight both reject unsandboxed
+	     builds. Do not remove this to silence CoreAudio log noise.
+	     Sandboxed runs log a PRECONDITION FAILURE about a missing mach-lookup
+	     exception, plus HALC_ProxyObjectMap / HALC_ShellDevice / "throwing -10877".
+	     Those lines are benign telemetry and device-enumeration noise — they are NOT
+	     the cause of recording failures. Do NOT add the mach-lookup exception they
+	     name: it blocks App Store export with error 90285.
+	     See REGRESSION_REGISTER.md L1 and L15b before editing this file. -->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
 	<key>com.apple.developer.icloud-container-identifiers</key>
 	<array>
 		<string>iCloud.soloai.MeetingAgent</string>
