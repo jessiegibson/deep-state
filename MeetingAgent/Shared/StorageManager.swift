@@ -149,6 +149,19 @@ class StorageManager: ObservableObject {
         defer { url.stopAccessingSecurityScopedResource() }
         return try body()
     }
+
+    /// Async counterpart, for work that must hold the security scope across an
+    /// `await` — decoding frames out of a saved video, for instance. Deliberately a
+    /// separate name rather than an `async` overload: an overload pair that differs
+    /// only in effects is easy to resolve to the wrong one by accident.
+    func withScopedAccessAsync<T>(_ body: () async throws -> T) async rethrows -> T? {
+        guard storageMode == .local, let url = localBookmarkURL else {
+            return try await body()
+        }
+        guard url.startAccessingSecurityScopedResource() else { return nil }
+        defer { url.stopAccessingSecurityScopedResource() }
+        return try await body()
+    }
     #endif
 
     // MARK: - Save Meeting	
