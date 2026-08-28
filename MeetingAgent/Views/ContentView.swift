@@ -1,6 +1,5 @@
 #if os(macOS)
 import SwiftUI
-import Combine
 import EventKit
 
 enum AppView { case record, library }
@@ -8,7 +7,7 @@ enum AppView { case record, library }
 // MARK: - Content View
 
 struct ContentView: View {
-    @ObservedObject var manager: MeetingManager
+    var manager: MeetingManager
     @State private var activeView: AppView = .record
     @State private var isSettingsOpen = false
 
@@ -81,7 +80,10 @@ struct ContentView: View {
 // MARK: - Recording View
 
 struct RecordingView: View {
-    @ObservedObject var manager: MeetingManager
+    /// `@Bindable`, not a plain property: the notes panel binds
+    /// `$manager.meetingTitle` / `$manager.meetingNotes`, and `@Observable` types
+    /// get their `$` projection from `@Bindable` rather than `@ObservedObject`.
+    @Bindable var manager: MeetingManager
     @StateObject private var calendar = CalendarManager.shared
     @State private var isStorageSettingsOpen = false
 
@@ -480,7 +482,7 @@ struct RecordingView: View {
 // MARK: - Library View
 
 struct LibraryView: View {
-    @ObservedObject var manager: MeetingManager
+    var manager: MeetingManager
     @State private var selectedRecord: MeetingRecord? = nil
     @State private var isSelectionMode = false
     @State private var selectedFolderURLs: Set<String> = []

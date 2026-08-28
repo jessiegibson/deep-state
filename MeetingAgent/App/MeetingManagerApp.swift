@@ -11,7 +11,7 @@ import SwiftUI
 @main
 struct MeetingAgentApp: App {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
-    @StateObject private var manager = MeetingManager()
+    @State private var manager = MeetingManager()
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
