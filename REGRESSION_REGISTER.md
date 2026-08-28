@@ -107,6 +107,18 @@ instead of attaching to the existing one with its TestFlight history.
 **Fixed same day** — both configs are back to `com.soloai.deepState` (canonical).
 Still outstanding: the orphaned App Store Connect record needs manual deletion in the web UI.
 
+**RECURRED, and it cost an App Store rejection.** By 2026-08-19 Release had drifted again,
+this time to `com.soloai.meetingAgentMacOS`. Because archive builds are always Release, the
+0.8 submission landed on the duplicate record — the one named "Deep State Meeting Agent
+MacOS" — and App Review rejected it under **guideline 5.2.5** for using the term "macOS" in
+the app name. Compounding it, `PRODUCT_NAME = $(TARGET_NAME)` meant `CFBundleName` was
+literally "Deep State Meeting Agent MacOS" too.
+
+Fixed 2026-08-23: Release bundle ID back to `com.soloai.deepState`; `PRODUCT_NAME` pinned to
+`"Deep State Meeting Agent"` on both configs (do **not** let it inherit `$(TARGET_NAME)` —
+the target is still named "…MacOS"); product reference and scheme `BuildableName` updated
+to match. See `APP_REVIEW_RESPONSE.md`.
+
 **Guard:**
 ```bash
 grep -n PRODUCT_BUNDLE_IDENTIFIER "Deep State Meeting Agent MacOS.xcodeproj/project.pbxproj"
@@ -584,6 +596,73 @@ a `body` is the bug signature — grep for it.
 **Related:** this masked L3. Even with the fix, the iCloud path stayed broken until the
 entitlements came back, because `rootURL` genuinely was nil. Two independent faults presenting
 as one dead button. The step now shows why iCloud is unavailable instead of failing silently.
+
+---
+
+### L19. Entitlements are also injected by `ENABLE_*` build settings, not just the file
+
+The `.entitlements` file is **not** the whole story. Xcode's per-target sandbox settings in
+`project.pbxproj` inject entitlements into the signed binary independently of it:
+
+| Build setting | Entitlement it injects |
+| --- | --- |
+| `ENABLE_APP_SANDBOX` | `com.apple.security.app-sandbox` |
+| `ENABLE_INCOMING_NETWORK_CONNECTIONS` | `com.apple.security.network.server` |
+| `ENABLE_OUTGOING_NETWORK_CONNECTIONS` | `com.apple.security.network.client` |
+| `ENABLE_FILE_ACCESS_DOWNLOADS_FOLDER` | `com.apple.security.files.downloads.read-write` |
+| `ENABLE_USER_SELECTED_FILES` | `com.apple.security.files.user-selected.*` |
+| `ENABLE_RESOURCE_ACCESS_CAMERA` | `com.apple.security.device.camera` |
+| `ENABLE_RESOURCE_ACCESS_AUDIO_INPUT` | `com.apple.security.device.audio-input` |
+| `ENABLE_RESOURCE_ACCESS_CALENDARS` | `com.apple.security.personal-information.calendars` |
+
+This is why cleaning the `.entitlements` file was not enough. The 0.8 submission was
+rejected under **guideline 2.4.5(i)** for shipping `network.server`,
+`files.downloads.read-write`, and `device.camera` — and two of those three were nowhere in
+`MeetingAgent.entitlements`. They came from `ENABLE_INCOMING_NETWORK_CONNECTIONS = YES` and
+`ENABLE_FILE_ACCESS_DOWNLOADS_FOLDER = readwrite`. None of the three has a call site; the
+only `AVCaptureDevice` use in the app is `.audio`.
+
+The settings and the file can also *disagree*: `ENABLE_RESOURCE_ACCESS_CALENDARS` was `NO`
+while the file declared `personal-information.calendars`. Calendar access is real, so the
+setting was wrong.
+
+**Related, and worse:** `54e64e4` (2026-08-04, "Removed the com.apple.sandbox from the
+entitlements") deleted `ENABLE_APP_SANDBOX = YES` from both configs. The Mac App Store and
+macOS TestFlight both **require** the sandbox — this silently forfeits the distribution
+channel, and it is the exact mistake L1 already documents as wrong. Restored 2026-08-23.
+The sandbox stays ON — see L1, which spells out that neither half of the "sandboxed AND
+`audioanalyticsd` entitlement absent" precondition line may be cleared.
+
+**Guard — the file is not evidence. Inspect the signed binary:**
+```bash
+codesign -d --entitlements :- "$DERIVED_DATA/Build/Products/Debug/Deep State Meeting Agent.app"
+```
+and check the settings themselves:
+```bash
+xcodebuild -project "Deep State Meeting Agent MacOS.xcodeproj" \
+  -scheme "deep state Meeting Agent" -configuration Release -showBuildSettings \
+  | grep -E "ENABLE_APP_SANDBOX|ENABLE_RESOURCE_ACCESS|ENABLE_.*NETWORK|ENABLE_FILE_ACCESS"
+```
+
+---
+
+### L20. Permission pre-prompts must always lead to the system request
+
+App Review guideline **5.1.1(iv)**, rejected 2026-08-19. A screen that explains a permission
+before requesting it is allowed, but:
+
+- the button may **not** say "Grant Permission" — use "Continue" or "Next"
+- there may be **no** way to dismiss the explanation without the request firing (the BACK
+  button in `OnboardingView` was the cited violation)
+
+`OnboardingView.swift` now has no BACK button at all, and `CONTINUE` on steps 1–4 calls
+`requestPermission(forStep:)` before advancing. `isPermissionStep` guards the distinction —
+if you add an onboarding step, update that range.
+
+**Guard:** when retesting onboarding, macOS remembers permission decisions after uninstall:
+```bash
+tccutil reset All com.soloai.deepState
+```
 
 ---
 

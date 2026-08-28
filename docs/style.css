@@ -1,0 +1,271 @@
+/* Deep State Meeting Agent — neo-brutalist support site
+   Mirrors NBDesign tokens from NeobrutalDesign.swift. Self-contained, no dependencies. */
+
+:root {
+  --bg: #ffffff;
+  --fg: #111111;
+  --muted: #55605a;
+  --green: #10893e;
+  --accent: #ff3333;
+  --blue: #0080ff;
+  --surface: #f2f4f3;
+  --border: #000000;
+  --border-w: 3px;
+  --shadow: 6px 6px 0 var(--border);
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+:root:not([data-theme="light"]) {
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d0d0d;
+    --fg: #f2f2f2;
+    --muted: #9aa39e;
+    --green: #35d06a;
+    --accent: #ff5555;
+    --blue: #4da3ff;
+    --surface: #1c1c1c;
+    --border: #f2f2f2;
+    --shadow: 6px 6px 0 var(--border);
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0d0d0d;
+  --fg: #f2f2f2;
+  --muted: #9aa39e;
+  --green: #35d06a;
+  --accent: #ff5555;
+  --blue: #4da3ff;
+  --surface: #1c1c1c;
+  --border: #f2f2f2;
+  --shadow: 6px 6px 0 var(--border);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--mono);
+  font-size: 15px;
+  line-height: 1.65;
+  -webkit-text-size-adjust: 100%;
+}
+
+.wrap {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 32px 20px 80px;
+}
+
+/* Header */
+header.masthead {
+  border-bottom: var(--border-w) solid var(--border);
+  background: var(--surface);
+}
+
+header.masthead .wrap { padding-block: 28px 24px; }
+
+.eyebrow {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 10px;
+}
+
+h1 {
+  font-size: clamp(26px, 6vw, 40px);
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin: 0 0 12px;
+}
+
+.tagline {
+  margin: 0;
+  font-size: 15px;
+  color: var(--muted);
+  max-width: 56ch;
+}
+
+nav.sitenav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+nav.sitenav a {
+  display: inline-block;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+  color: var(--fg);
+  background: var(--bg);
+  border: var(--border-w) solid var(--border);
+}
+
+nav.sitenav a:hover { background: var(--green); color: var(--bg); }
+nav.sitenav a[aria-current="page"] { background: var(--fg); color: var(--bg); }
+
+/* Typography */
+h2 {
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  margin: 48px 0 4px;
+  padding-bottom: 8px;
+  border-bottom: var(--border-w) solid var(--border);
+}
+
+h3 {
+  font-size: 16px;
+  font-weight: 800;
+  margin: 30px 0 6px;
+}
+
+p { margin: 12px 0; }
+ul, ol { margin: 12px 0; padding-left: 22px; }
+li { margin: 6px 0; }
+
+a { color: var(--fg); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+a:hover { color: var(--accent); }
+
+code {
+  font-family: var(--mono);
+  font-size: 0.9em;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 1px 5px;
+}
+
+strong { font-weight: 800; }
+
+/* Cards */
+.card {
+  background: var(--surface);
+  border: var(--border-w) solid var(--border);
+  padding: 20px;
+  margin: 20px 0;
+}
+
+.card.contact {
+  background: var(--bg);
+  box-shadow: var(--shadow);
+}
+
+.card h3 { margin-top: 0; }
+.card > :last-child { margin-bottom: 0; }
+
+.mail {
+  display: inline-block;
+  margin: 6px 0;
+  padding: 12px 22px;
+  font-size: 15px;
+  font-weight: 800;
+  text-decoration: none;
+  color: var(--bg);
+  background: var(--green);
+  border: var(--border-w) solid var(--border);
+  word-break: break-all;
+}
+
+.mail:hover { background: var(--accent); color: #fff; }
+
+/* FAQ */
+details {
+  border: var(--border-w) solid var(--border);
+  background: var(--surface);
+  margin: 12px 0;
+}
+
+details[open] { background: var(--bg); }
+
+summary {
+  cursor: pointer;
+  padding: 14px 18px;
+  font-weight: 800;
+  font-size: 14px;
+  list-style: none;
+}
+
+summary::-webkit-details-marker { display: none; }
+summary::before { content: "▸ "; color: var(--green); font-weight: 900; }
+details[open] summary::before { content: "▾ "; }
+summary:hover { color: var(--accent); }
+
+details .body {
+  padding: 0 18px 16px;
+  border-top: 1px solid var(--border);
+  margin-top: 0;
+  padding-top: 12px;
+}
+
+details .body > :first-child { margin-top: 0; }
+details .body > :last-child { margin-bottom: 0; }
+
+/* Callout */
+.note {
+  border-left: var(--border-w) solid var(--green);
+  background: var(--surface);
+  padding: 14px 18px;
+  margin: 20px 0;
+}
+
+.note.warn { border-left-color: var(--accent); }
+.note > :first-child { margin-top: 0; }
+.note > :last-child { margin-bottom: 0; }
+
+/* Tables */
+.tablewrap { overflow-x: auto; margin: 20px 0; }
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 460px;
+  font-size: 14px;
+}
+
+th, td {
+  border: 1px solid var(--border);
+  padding: 9px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  background: var(--surface);
+  font-weight: 800;
+  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+}
+
+/* Footer */
+footer {
+  margin-top: 64px;
+  padding-top: 20px;
+  border-top: var(--border-w) solid var(--border);
+  font-size: 13px;
+  color: var(--muted);
+}
+
+footer a { color: var(--muted); }
+
+.updated {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
