@@ -12,6 +12,8 @@
 		11FE81532F23398500D6AE57 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 11FE81522F23398500D6AE57 /* WhisperKit */; };
 		2D71FA4A39CD453FA2F5A412 /* AudioRecorderSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F608AEBE50DF7C39E657B667 /* AudioRecorderSettingsTests.swift */; };
 		7411909B504CB06F58E03E9F /* MeetingRecordSectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8DEA4275438256ED7FEA48A /* MeetingRecordSectionTests.swift */; };
+		A1B2C3D400010000000000B1 /* ScreenshotManifestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D400010000000000E1 /* ScreenshotManifestTests.swift */; };
+		A1B2C3D400020000000000B2 /* FrameSignatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D400020000000000E2 /* FrameSignatureTests.swift */; };
 		B752697C09EF44CF2633E9B9 /* TranscriptFormatterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4023EDE6698552DFBB8072A2 /* TranscriptFormatterTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -31,6 +33,8 @@
 		4023EDE6698552DFBB8072A2 /* TranscriptFormatterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TranscriptFormatterTests.swift; sourceTree = "<group>"; };
 		574A487EF53B10F0B5B41EC6 /* MeetingAgentTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MeetingAgentTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B8DEA4275438256ED7FEA48A /* MeetingRecordSectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingRecordSectionTests.swift; sourceTree = "<group>"; };
+		A1B2C3D400010000000000E1 /* ScreenshotManifestTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ScreenshotManifestTests.swift; sourceTree = "<group>"; };
+		A1B2C3D400020000000000E2 /* FrameSignatureTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FrameSignatureTests.swift; sourceTree = "<group>"; };
 		B9BE699DDE809F2A9D50F2D4 /* SummaryTemplateTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SummaryTemplateTests.swift; sourceTree = "<group>"; };
 		F608AEBE50DF7C39E657B667 /* AudioRecorderSettingsTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AudioRecorderSettingsTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -95,6 +99,8 @@
 				B9BE699DDE809F2A9D50F2D4 /* SummaryTemplateTests.swift */,
 				F608AEBE50DF7C39E657B667 /* AudioRecorderSettingsTests.swift */,
 				B8DEA4275438256ED7FEA48A /* MeetingRecordSectionTests.swift */,
+				A1B2C3D400010000000000E1 /* ScreenshotManifestTests.swift */,
+				A1B2C3D400020000000000E2 /* FrameSignatureTests.swift */,
 			);
 			path = MeetingAgentTests;
 			sourceTree = "<group>";
@@ -292,6 +298,8 @@
 				1134D9168D02127FAABC44F1 /* SummaryTemplateTests.swift in Sources */,
 				2D71FA4A39CD453FA2F5A412 /* AudioRecorderSettingsTests.swift in Sources */,
 				7411909B504CB06F58E03E9F /* MeetingRecordSectionTests.swift in Sources */,
+				A1B2C3D400010000000000B1 /* ScreenshotManifestTests.swift in Sources */,
+				A1B2C3D400020000000000B2 /* FrameSignatureTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
