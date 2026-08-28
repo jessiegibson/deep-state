@@ -2,7 +2,6 @@
 import SwiftUI
 import ScreenCaptureKit
 import WhisperKit
-import Combine
 import AVFoundation
 import UniformTypeIdentifiers
 import EventKit
@@ -16,48 +15,72 @@ enum PermissionStatus {
     case granted, denied, notDetermined
 }
 
+/// Central view model. `@Observable` rather than `ObservableObject`: SwiftUI then
+/// tracks the individual properties a view actually reads, instead of redrawing
+/// every observer on any `objectWillChange`. NSObject is gone with it — nothing here
+/// conforms to an Objective-C protocol any more (the capture delegates live on
+/// `ScreenRecorder`), so the inheritance was pure legacy.
 @MainActor
-class MeetingManager: NSObject, ObservableObject {
-    @Published var isRecording = false
-    @Published var statusMessage = "Ready"
-    @Published var recordingMode: RecordingMode = .audioOnly
+@Observable
+class MeetingManager {
+    var isRecording = false
+    /// Structured status channel. Read `.message` for text, `.severity` for styling,
+    /// and `.failure` to branch on a specific error category.
+    var status: AppStatus = .idle
+    var recordingMode: RecordingMode = .audioOnly
 
     // Screen picker (only relevant in .screenAndAudio mode with multiple displays)
-    @Published var availableDisplays: [DisplayOption] = []
-    @Published var selectedDisplayID: CGDirectDisplayID?
+    var availableDisplays: [DisplayOption] = []
+    var selectedDisplayID: CGDirectDisplayID?
 
     let storage = StorageManager.shared
     /// Convenience accessor — views that read savedFolderURL continue to work.
     var savedFolderURL: URL? { storage.rootURL }
 
     // Preferences
-    @Published var shouldRecordCamera: Bool = UserDefaults.standard.bool(forKey: "pref_record_camera") {
-        didSet { UserDefaults.standard.set(shouldRecordCamera, forKey: "pref_record_camera") }
+    /// Hand-written rather than a plain stored property: `@Observable` rewrites
+    /// stored properties into computed ones, which leaves no room for a `didSet`.
+    /// This is Apple's documented shape for a computed property that still
+    /// participates in observation.
+    @ObservationIgnored
+    private var _shouldRecordCamera: Bool = UserDefaults.standard.bool(forKey: "pref_record_camera")
+
+    var shouldRecordCamera: Bool {
+        get {
+            access(keyPath: \.shouldRecordCamera)
+            return _shouldRecordCamera
+        }
+        set {
+            withMutation(keyPath: \.shouldRecordCamera) {
+                _shouldRecordCamera = newValue
+                UserDefaults.standard.set(newValue, forKey: "pref_record_camera")
+            }
+        }
     }
-    @Published var shouldRecordSystemAudio: Bool = true
+    var shouldRecordSystemAudio: Bool = true
     /// Whether to capture the mic alongside a screen recording. See
     /// `startMicrophoneAlongsideScreen()` — this is a separate `AVAudioEngine` tap,
     /// NOT `SCStreamConfiguration.captureMicrophone` (which is unusable here).
-    @Published var shouldRecordMicrophone: Bool = true
+    var shouldRecordMicrophone: Bool = true
 
     // LLM settings accessor (passed to LLMSettingsView). Summarization itself lives
     // in TranscriptViewModel — MeetingManager only exposes the shared settings object.
     let llmSettings = LLMSettings.shared
 
     // Calendar integration
-    @Published var calendarAttendees: [String] = []
+    var calendarAttendees: [String] = []
 
     // Import & retranscribe
-    @Published var isImporting = false
-    @Published var importProgress = ""
-    @Published var isRetranscribing = false
-    @Published var retranscribeProgress = ""
+    var isImporting = false
+    var importProgress = ""
+    var isRetranscribing = false
+    var retranscribeProgress = ""
 
     private let screenRecorder = ScreenRecorder()
     private var lastRecordingURL: URL?
     /// Guards against a second STOP while finalization is still in flight — two
     /// concurrent stops race on the same stream and corrupt the recording.
-    @Published private(set) var isStopping = false
+    private(set) var isStopping = false
     private let whisperTranscriber = WhisperTranscriber()
 
     // Audio-only capture + file import helpers
@@ -72,28 +95,20 @@ class MeetingManager: NSObject, ObservableObject {
     private var screenMicURL: URL?
     /// Why the mic isn't being captured, when it isn't. Surfaced in the status line so
     /// a silent recording is never a surprise discovered after the meeting.
-    @Published private(set) var micStatusNote: String?
+    private(set) var micStatusNote: String?
 
     // Voice Visualizer Properties
-    @Published var amplitudes: [CGFloat] = Array(repeating: 0.1, count: 5)
+    var amplitudes: [CGFloat] = Array(repeating: 0.1, count: 5)
     private let ambientMonitor = AmbientLevelMonitor()
-    @Published var isPaused = false
-    @Published var isNotesSheetOpen = false
-    @Published var meetingNotes = ""
-    @Published var meetingTitle = ""
-    @Published var meetingLibrary: [MeetingRecord] = []
+    var isPaused = false
+    var isNotesSheetOpen = false
+    var meetingNotes = ""
+    var meetingTitle = ""
+    var meetingLibrary: [MeetingRecord] = []
     private var recordingSegments: [URL] = []
     private var segmentCounter = 0
 
-    func checkPermissions() {
-        if let message = PermissionsService.requestStartupPermissions() {
-            statusMessage = message
-        }
-    }
-
-    override init() {
-        super.init()
-
+    init() {
         print("MeetingManager init started")
 
         // Idle visualizer levels flow back into our published amplitudes.
@@ -105,16 +120,16 @@ class MeetingManager: NSObject, ObservableObject {
 
         // Transcription progress messages surface in the status line.
         whisperTranscriber.onStatus = { [weak self] message in
-            self?.statusMessage = message
+            self?.status = .progress(message)
         }
 
         // Screen-capture stream/recorder failures stop recording and report status.
         screenRecorder.onStreamStopped = { [weak self] error in
-            self?.statusMessage = "Stream stopped: \(error.localizedDescription)"
+            self?.status = .failure(.streamStopped(error.localizedDescription))
             self?.isRecording = false
         }
         screenRecorder.onRecorderError = { [weak self] error in
-            self?.statusMessage = "Recorder Error: \(error.localizedDescription)"
+            self?.status = .failure(.recorderError(error.localizedDescription))
             self?.isRecording = false
         }
 
@@ -140,17 +155,19 @@ class MeetingManager: NSObject, ObservableObject {
         fileImportService.onImportProgress = { [weak self] v in self?.importProgress = v }
         fileImportService.onRetranscribingChanged = { [weak self] v in self?.isRetranscribing = v }
         fileImportService.onRetranscribeProgress = { [weak self] v in self?.retranscribeProgress = v }
-        fileImportService.onStatus = { [weak self] v in self?.statusMessage = v }
+        fileImportService.onStatus = { [weak self] v in self?.status = v }
         fileImportService.onLibraryChanged = { [weak self] in self?.loadLibrary() }
 
         // StorageManager.shared handles folder resolution (iCloud or local bookmark)
         print("Folder loaded")
-        
-        // 1. Check permissions immediately on startup
-        checkPermissions()
-        print("Permissions check completed")
-        
-        // 2. Start loading the AI model in the background
+
+        // No permission requests here. Mic and screen access are asked for at the
+        // moment the feature is used (onboarding's GRANT buttons, or the start of a
+        // recording), never at launch — a user who has not touched anything yet has
+        // no idea what the prompt is for, and App Review reads a cold-start TCC
+        // prompt as an unjustified request.
+
+        // Start loading the AI model in the background.
         Task { await setupEngine() }
         print("WhisperKit setup started")
         
@@ -160,11 +177,11 @@ class MeetingManager: NSObject, ObservableObject {
     
     // MARK: - Setup
     private func setupEngine() async {
-        statusMessage = "Loading AI Model..."
+        status = .progress("Loading AI model…")
         if let error = await whisperTranscriber.load() {
-            statusMessage = "AI Load Failed: \(error)"
+            status = .failure(.modelLoadFailed(error))
         } else {
-            statusMessage = "Ready"
+            status = .idle
         }
     }
     
@@ -186,7 +203,7 @@ class MeetingManager: NSObject, ObservableObject {
             if (error as NSError).code == -3801 {
                 availableDisplays = []
                 PermissionsService.hasRequestedScreenRecording = true
-                statusMessage = "Screen Recording permission denied — enable it in System Settings, then relaunch."
+                status = .failure(.screenRecordingDenied)
             }
         }
     }
@@ -214,7 +231,7 @@ class MeetingManager: NSObject, ObservableObject {
         // cause HALC_ProxyIOContext _StartIO to fail with error 35 (resource busy)
         stopMonitoring()
 
-        statusMessage = "Starting..."
+        status = .progress("Starting…")
         recordingSegments = []
         segmentCounter = 0
         isPaused = false
@@ -236,13 +253,9 @@ class MeetingManager: NSObject, ObservableObject {
             isRecording = true
             // Never let a missing mic pass unnoticed — it's the difference between
             // recording the meeting and recording silence.
-            if let note = micStatusNote {
-                statusMessage = "Recording — NO MIC (\(note))"
-            } else {
-                statusMessage = "Recording..."
-            }
+            status = .recording(mode: recordingMode, micNote: micStatusNote)
         } catch {
-            statusMessage = "Error: \(error.localizedDescription)"
+            status = .failure(.captureStartFailed(error.localizedDescription))
             print("Start error: \(error)")
         }
     }
@@ -251,12 +264,7 @@ class MeetingManager: NSObject, ObservableObject {
     /// prompt isn't captured into the recording. Returns whether the mic may be used.
     private func resolveMicrophonePermission() async -> Bool {
         guard shouldRecordMicrophone else { return false }
-        var status = AVCaptureDevice.authorizationStatus(for: .audio)
-        if status == .notDetermined {
-            _ = await AVCaptureDevice.requestAccess(for: .audio)
-            status = AVCaptureDevice.authorizationStatus(for: .audio)
-        }
-        return status == .authorized
+        return await PermissionsService.ensureMicrophoneAccess() == .granted
     }
 
     /// Starts a microphone capture that runs in parallel with the ScreenCaptureKit
@@ -306,7 +314,7 @@ class MeetingManager: NSObject, ObservableObject {
         isStopping = true
         defer { isStopping = false }
 
-        statusMessage = "Stopping..."
+        status = .progress("Stopping…")
         isPaused = false
 
         do {
@@ -334,7 +342,7 @@ class MeetingManager: NSObject, ObservableObject {
             }
 
             guard !recordingSegments.isEmpty else {
-                statusMessage = "No recording found"
+                status = .failure(.noRecordingFound)
                 return
             }
 
@@ -352,30 +360,30 @@ class MeetingManager: NSObject, ObservableObject {
             }
 
             guard !recordingSegments.isEmpty else {
-                statusMessage = "Recording was empty — nothing was captured"
+                status = .failure(.recordingEmpty)
                 return
             }
 
             // Merge segments if the recording was paused and resumed
             let videoURL: URL
             if recordingSegments.count > 1 {
-                statusMessage = "Merging recording segments..."
+                status = .progress("Merging recording segments…")
                 videoURL = try await screenRecorder.mergeSegments(recordingSegments)
             } else {
                 videoURL = recordingSegments[0]
             }
 
-            statusMessage = "Extracting audio..."
+            status = .progress("Extracting audio…")
             let systemAudioURL = try await extractAudio(from: videoURL)
 
             // Two independent sources: system audio (inside the MOV) and the mic
             // (its own WAV). Mix whichever we actually got into one track.
-            statusMessage = "Mixing audio..."
+            status = .progress("Mixing audio…")
             let audioURL = try await combineAudioSources(system: systemAudioURL, mic: micURL)
 
             let transcriptText: String
             if let audioURL {
-                statusMessage = "Transcribing with AI..."
+                status = .progress("Transcribing with AI…")
                 transcriptText = await transcribeAudio(audioURL: audioURL)
             } else {
                 // No audio track in the capture — keep the video instead of
@@ -383,7 +391,7 @@ class MeetingManager: NSObject, ObservableObject {
                 transcriptText = "_No audio was captured with this screen recording._"
             }
 
-            statusMessage = "Saving files..."
+            status = .progress("Saving files…")
             saveTranscript(text: transcriptText, videoURL: videoURL, audioURL: audioURL)
 
             // Cleanup segment files and any merged/intermediate temp files
@@ -395,8 +403,9 @@ class MeetingManager: NSObject, ObservableObject {
             recordingSegments = []
             isNotesSheetOpen = false
             loadLibrary()
-            if let note = micStatusNote {
-                statusMessage += " — no mic audio (\(note))"
+            // saveTranscript() has just set the outcome; only annotate a success.
+            if let note = micStatusNote, case .success(let saved) = status {
+                status = .success("\(saved) — no mic audio (\(note))")
             }
 
         } catch {
@@ -407,7 +416,11 @@ class MeetingManager: NSObject, ObservableObject {
                 screenMicURL = nil
             }
             let ns = error as NSError
-            statusMessage = "Processing failed: \(error.localizedDescription) [\(ns.domain) \(ns.code)]"
+            status = .failure(.processingFailed(
+                description: error.localizedDescription,
+                domain: ns.domain,
+                code: ns.code
+            ))
             print("[MeetingManager] stopAndTranscribe failed: \(ns.domain) \(ns.code) — \(ns)")
             isRecording = false
             isNotesSheetOpen = false
@@ -422,7 +435,7 @@ class MeetingManager: NSObject, ObservableObject {
             audioRecorder.pause()
             amplitudes = Array(repeating: 0.1, count: 5)
             isPaused = true
-            statusMessage = "Paused"
+            status = .paused
         } else {
             do {
                 // Finalize the current segment file before pausing.
@@ -433,9 +446,9 @@ class MeetingManager: NSObject, ObservableObject {
                     recordingSegments.append(url)
                 }
                 isPaused = true
-                statusMessage = "Paused"
+                status = .paused
             } catch {
-                statusMessage = "Pause failed: \(error.localizedDescription)"
+                status = .failure(.pauseFailed(error.localizedDescription))
             }
         }
     }
@@ -447,9 +460,9 @@ class MeetingManager: NSObject, ObservableObject {
             do {
                 try audioRecorder.resume()
                 isPaused = false
-                statusMessage = "Recording (Audio Only)..."
+                status = .recording(mode: recordingMode, micNote: nil)
             } catch {
-                statusMessage = "Resume failed: \(error.localizedDescription)"
+                status = .failure(.resumeFailed(error.localizedDescription))
             }
         } else {
             segmentCounter += 1
@@ -462,9 +475,9 @@ class MeetingManager: NSObject, ObservableObject {
                 try await screenRecorder.startCapture(to: url)
                 if screenMicURL != nil { try audioRecorder.resume() }
                 isPaused = false
-                statusMessage = "Recording..."
+                status = .recording(mode: recordingMode, micNote: micStatusNote)
             } catch {
-                statusMessage = "Resume failed: \(error.localizedDescription)"
+                status = .failure(.resumeFailed(error.localizedDescription))
             }
         }
     }
@@ -579,7 +592,7 @@ class MeetingManager: NSObject, ObservableObject {
         
         // Check if the asset has audio tracks
         guard try await asset.load(.tracks).contains(where: { $0.mediaType == .audio }) else {
-            statusMessage = "No audio track found in recording"
+            status = .failure(.noAudioTrack)
             return nil
         }
         
@@ -602,7 +615,7 @@ class MeetingManager: NSObject, ObservableObject {
         } catch {
             let ns = error as NSError
             print("[MeetingManager] Audio extraction export failed: \(ns.domain) \(ns.code) — \(ns)")
-            statusMessage = "Audio extraction failed — saving video only"
+            status = .failure(.audioExtractionFailed)
             return nil
         }
 
@@ -646,39 +659,54 @@ class MeetingManager: NSObject, ObservableObject {
 
     // MARK: - Save Logic
     func saveTranscript(text: String, videoURL: URL? = nil, audioURL: URL? = nil) {
-        let result = try? storage.withScopedAccess {
-            try self.storage.saveMeeting(
-                transcript: text,
-                title: self.meetingTitle,
-                notes: self.meetingNotes,
-                audioURL: audioURL,
-                videoURL: videoURL
-            )
-        }
+        // `withScopedAccess` returns nil for exactly one reason — the security-scoped
+        // bookmark refused to open — and rethrows anything `saveMeeting` throws. The
+        // old code wrapped the whole thing in `try?`, which collapsed both into nil
+        // and then *guessed* the cause from `rootURL`. A genuine write failure (disk
+        // full, the folder deleted mid-save, a bad bookmark) was reported to the user
+        // as "Permission denied to access folder", which sent them to fix the wrong
+        // thing. Distinguish the two.
+        do {
+            let folder = try storage.withScopedAccess {
+                try self.storage.saveMeeting(
+                    transcript: text,
+                    title: self.meetingTitle,
+                    notes: self.meetingNotes,
+                    audioURL: audioURL,
+                    videoURL: videoURL
+                )
+            }
 
-        if let folder = result {
-            statusMessage = "Saved to \(folder.lastPathComponent)"
+            guard let folder else {
+                status = .failure(.saveLocationDenied)
+                return
+            }
+
+            status = .success("Saved to \(folder.lastPathComponent)")
             // Reset calendar-driven state so the next recording starts clean.
             meetingTitle = ""
             calendarAttendees = []
             CalendarManager.shared.selectedEvent = nil
-        } else if storage.rootURL == nil {
-            statusMessage = "No save location selected"
-        } else {
-            statusMessage = "Permission denied to access folder."
+        } catch StorageManager.StorageError.noSaveLocation {
+            status = .failure(.noSaveLocation)
+        } catch StorageManager.StorageError.permissionDenied {
+            status = .failure(.saveLocationDenied)
+        } catch {
+            print("[MeetingManager] saveMeeting failed: \(error)")
+            status = .failure(.saveFailed(error.localizedDescription))
         }
     }
     
     // MARK: - Audio-Only Recording
     private func startAudioOnly() async {
-        statusMessage = "Starting audio recording..."
+        status = .progress("Starting audio recording…")
 
-        let micStatus = AVCaptureDevice.authorizationStatus(for: .audio)
-        guard micStatus == .authorized else {
-            if micStatus == .notDetermined {
-                AVCaptureDevice.requestAccess(for: .audio) { _ in }
-            }
-            statusMessage = "Microphone access required."
+        // Ask for the mic here, at the point the user pressed RECORD, and wait for
+        // the answer. The old code fired the request without awaiting it and then
+        // read a status that was still .notDetermined, so granting access still
+        // produced an error message and a recording that never started.
+        guard await PermissionsService.ensureMicrophoneAccess() == .granted else {
+            status = .failure(.microphoneDenied)
             return
         }
 
@@ -689,15 +717,15 @@ class MeetingManager: NSObject, ObservableObject {
             isRecording = true
             meetingNotes = ""
             isNotesSheetOpen = true
-            statusMessage = "Recording (Audio Only)..."
+            status = .recording(mode: recordingMode, micNote: nil)
         } catch {
-            statusMessage = "Error: \(error.localizedDescription)"
+            status = .failure(.captureStartFailed(error.localizedDescription))
             print("Audio-only start error: \(error)")
         }
     }
 
     private func stopAudioOnly() async {
-        statusMessage = "Stopping..."
+        status = .progress("Stopping…")
 
         audioRecorder.stop()
         isRecording = false
@@ -705,33 +733,37 @@ class MeetingManager: NSObject, ObservableObject {
         amplitudes = Array(repeating: 0.1, count: 5)
 
         guard let wavURL = audioRecorder.wavURL else {
-            statusMessage = "No recording found"
+            status = .failure(.noRecordingFound)
             return
         }
 
         // Convert WAV to M4A for smaller file size
-        statusMessage = "Converting audio..."
+        status = .progress("Converting audio…")
         let m4aURL: URL
         do {
             m4aURL = try await audioRecorder.convertToM4A(from: wavURL)
         } catch {
             // Conversion failed. Don't lose the recording — save the WAV instead.
             print("[MeetingManager] M4A conversion failed: \(error)")
-            statusMessage = "Saving raw audio (M4A conversion failed)..."
+            status = .progress("Saving raw audio (M4A conversion failed)…")
             saveTranscript(
                 text: "_Transcript unavailable. Audio saved as WAV._",
                 videoURL: nil,
                 audioURL: wavURL
             )
             try? FileManager.default.removeItem(at: wavURL)
-            statusMessage = "Saved (WAV, no M4A)"
+            // saveTranscript() reported the real outcome. Only downgrade a success
+            // to note the missing M4A — never paper over a save that actually failed.
+            if case .success(let saved) = status {
+                status = .success("\(saved) (WAV, no M4A)")
+            }
             return
         }
 
-        statusMessage = "Transcribing with AI..."
+        status = .progress("Transcribing with AI…")
         let transcriptText = await transcribeAudio(audioURL: m4aURL)
 
-        statusMessage = "Saving files..."
+        status = .progress("Saving files…")
         saveTranscript(text: transcriptText, videoURL: nil, audioURL: m4aURL)
 
         // Cleanup temp files
@@ -740,7 +772,6 @@ class MeetingManager: NSObject, ObservableObject {
 
         isNotesSheetOpen = false
         loadLibrary()
-        statusMessage = "Saved successfully"
     }
 
     // MARK: - Permission Status (for Onboarding)

@@ -1,7 +1,8 @@
 import SwiftUI
 
-// MARK: - LLM Settings View
-// Displayed as a sheet from the gear icon in the main header.
+// MARK: - Settings View
+// Displayed as a sheet from the gear icon in the main header. Shared with the iOS
+// target, so anything platform-specific (launch at login) is guarded.
 
 struct LLMSettingsView: View {
     @ObservedObject var settings: LLMSettings
@@ -11,11 +12,19 @@ struct LLMSettingsView: View {
     @State private var keyDraft: [LLMProviderType: String] = [:]
     @State private var savedFeedback: String? = nil
 
+    #if os(macOS)
+    // Mirrors of the system's login-item state. Never treated as the source of
+    // truth — the user can change it in System Settings without telling the app —
+    // so both are re-read from SMAppService every time this sheet appears.
+    @State private var launchAtLogin = false
+    @State private var launchNeedsApproval = false
+    #endif
+
     var body: some View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                Text("LLM SETTINGS")
+                Text("SETTINGS")
                     .font(NBDesign.headlineFont)
                 Spacer()
                 Button {
@@ -34,6 +43,10 @@ struct LLMSettingsView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: NBDesign.padding) {
+
+                    #if os(macOS)
+                    generalSection
+                    #endif
 
                     // Per-feature provider selection
                     providerSection(
@@ -118,6 +131,55 @@ struct LLMSettingsView: View {
     }
 
     // MARK: - Subviews
+
+    #if os(macOS)
+    /// Launch-at-login lives here rather than in a preferences file because the state
+    /// belongs to the system, not the app. See `LaunchAtLoginService`.
+    private var generalSection: some View {
+        VStack(alignment: .leading, spacing: NBDesign.smallPadding) {
+            Text("GENERAL")
+                .font(NBDesign.captionFont)
+                .foregroundStyle(.secondary)
+
+            Toggle(isOn: Binding(
+                get: { launchAtLogin },
+                set: { requested in
+                    // Take the status that actually took effect, not the one asked
+                    // for — a refused or blocked registration must leave the checkbox
+                    // showing the truth rather than snapping to the user's click.
+                    launchAtLogin = LaunchAtLoginService.shared.setEnabled(requested)
+                    launchNeedsApproval = LaunchAtLoginService.shared.requiresApproval
+                }
+            )) {
+                Text("Launch Deep State at login")
+                    .font(NBDesign.bodyFont)
+            }
+            .toggleStyle(.checkbox)
+
+            if launchNeedsApproval {
+                Text("Blocked in System Settings. Turn \"Deep State Meeting Agent\" on under Login Items.")
+                    .font(NBDesign.captionFont)
+                    .foregroundStyle(NBDesign.accent)
+
+                Button("OPEN LOGIN ITEMS") {
+                    LaunchAtLoginService.shared.openLoginItemsSettings()
+                }
+                .buttonStyle(NBButtonStyle(color: NBDesign.surface, textColor: NBDesign.foreground))
+            }
+
+            if let error = LaunchAtLoginService.shared.lastError {
+                Text(error)
+                    .font(NBDesign.captionFont)
+                    .foregroundStyle(NBDesign.accent)
+            }
+        }
+        .nbCard()
+        .onAppear {
+            launchAtLogin = LaunchAtLoginService.shared.isEnabled
+            launchNeedsApproval = LaunchAtLoginService.shared.requiresApproval
+        }
+    }
+    #endif
 
     private func providerSection(label: String, binding: Binding<LLMProviderType>) -> some View {
         VStack(alignment: .leading, spacing: NBDesign.smallPadding) {
