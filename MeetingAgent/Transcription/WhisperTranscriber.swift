@@ -24,8 +24,10 @@ final class WhisperTranscriber {
     func load() async -> String? {
         do {
             // Load WhisperKit once at startup (this can take a few seconds).
-            // Note: ensure the model variant matches the Mac's RAM.
-            let modelName = "openai_whisper-small"
+            // The variant comes from WhisperModelPreference rather than being
+            // hardcoded here, so the planned Settings picker has one place to write
+            // to and low-RAM Macs are not stuck with whatever this line said.
+            let modelName = WhisperModelPreference.selected.rawValue
             let candidatePath = Bundle.main.resourceURL?
                 .appendingPathComponent(modelName)
                 .path()

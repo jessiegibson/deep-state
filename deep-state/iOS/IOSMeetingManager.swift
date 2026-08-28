@@ -48,7 +48,15 @@ class IOSMeetingManager: ObservableObject {
     private func loadWhisper() async {
         statusMessage = "Loading AI model..."
         do {
-            whisper = try await WhisperKit()
+            // Pin the variant explicitly. The bare WhisperKit() initialiser loads
+            // whatever the package currently defaults to, which can change under us
+            // on a dependency bump and is not a decision to leave to chance on a
+            // device that gets jetsammed for using too much memory.
+            let config = WhisperKitConfig(
+                model: WhisperModelPreference.selected.rawValue,
+                download: true
+            )
+            whisper = try await WhisperKit(config)
             statusMessage = "Ready"
         } catch {
             statusMessage = "AI model failed: \(error.localizedDescription)"
