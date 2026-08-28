@@ -902,10 +902,13 @@ extension MeetingManager {
     /// every recording whether or not screenshots are on, so a stale staged frame can
     /// never be filed into this meeting's folder.
     func prepareScreenshots() {
-        recordingStartedAt = Date()
+        let now = Date()
+        recordingStartedAt = now
         screenshotNote = nil
         screenshotNeedsPermission = false
-        screenshotCapture.reset()
+        // Anchor the screenshot clock to the recording, not to whenever capture
+        // starts — they differ when the user switches screenshots on partway through.
+        screenshotCapture.reset(startedAt: now)
     }
 
     /// Begins interval capture if the user has screenshots switched on.
@@ -993,13 +996,15 @@ extension MeetingManager {
                 dedupeThreshold: ScreenshotDedup.defaultThreshold
             ),
             screenshots: frames.map { frame in
-                .init(file: "screenshots/\(frame.url.lastPathComponent)",
-                      index: frame.index,
-                      elapsedSeconds: frame.elapsed,
-                      capturedAt: frame.capturedAt,
-                      width: frame.width,
-                      height: frame.height,
-                      byteSize: frame.byteSize)
+                ScreenshotManifest.Entry(
+                    file: "screenshots/\(frame.url.lastPathComponent)",
+                    index: frame.index,
+                    elapsedSeconds: frame.elapsed,
+                    capturedAt: frame.capturedAt,
+                    width: frame.width,
+                    height: frame.height,
+                    byteSize: frame.byteSize
+                )
             }
         )
 

@@ -50,7 +50,9 @@ final class VideoFrameExtractor {
         // nil  -> the security-scoped bookmark refused to open
         // -1    -> no video file in the folder (an audio-only recording)
         // 0     -> a video, but nothing could be extracted from it
-        let written = await storage.withScopedAccessAsync { () -> Int in
+        // No explicit closure signature: an `() -> Int` annotation would declare a
+        // non-async closure type and fail to match the async parameter.
+        let written: Int? = await storage.withScopedAccessAsync {
             guard FileManager.default.fileExists(atPath: videoURL.path) else { return -1 }
             return await self.extractFrames(from: videoURL,
                                             into: record,
@@ -143,7 +145,7 @@ final class VideoFrameExtractor {
                 continue
             }
 
-            entries.append(.init(
+            entries.append(ScreenshotManifest.Entry(
                 file: "screenshots/\(name)",
                 index: index,
                 elapsedSeconds: elapsed,

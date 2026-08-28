@@ -94,16 +94,21 @@ final class ScreenshotCapture {
 
     // MARK: Lifecycle
 
-    /// Clears staged frames and resets the clock. Call at the start of every recording,
-    /// whether or not screenshots are enabled, so a previous session's frames can never
-    /// be filed into this meeting's folder.
-    func reset() {
+    /// Clears staged frames and starts the session clock at `startedAt`.
+    ///
+    /// Called at the start of every recording, whether or not screenshots are enabled:
+    /// it is what stops a previous session's staged frames from being filed into this
+    /// meeting's folder, and it anchors the clock to the recording rather than to
+    /// whenever capture happens to begin. Those differ whenever the user switches
+    /// screenshots on partway through — offsets have to stay relative to the recording
+    /// or they will not line up with the transcript.
+    func reset(startedAt: Date = Date()) {
         captureTask?.cancel()
         captureTask = nil
         isEnabled = false
         frames = []
         lastSavedSignature = nil
-        startedAt = nil
+        self.startedAt = startedAt
         accumulatedPause = 0
         pausedAt = nil
         displayName = nil
@@ -122,23 +127,32 @@ final class ScreenshotCapture {
     func start(interval: TimeInterval) {
         self.interval = max(1, interval)
         isEnabled = true
+        // Deliberately does not reset the clock: `reset(startedAt:)` owns it, so a
+        // frame taken five minutes into a recording reports 300s even when capture
+        // was only switched on at minute five.
         if startedAt == nil { startedAt = Date() }
-        pausedAt = nil
         launchLoop()
     }
 
-    /// Suspends capture and stops the elapsed clock. The staged frames are kept.
+    /// Suspends capture and stops the elapsed clock. Staged frames are kept.
+    ///
+    /// The clock runs independently of `isEnabled`: a recording paused while
+    /// screenshots are switched off must still accumulate that gap, or frames taken
+    /// after the user switches them back on would carry the paused time in their
+    /// offsets and sit ahead of the audio.
     func pause() {
-        guard isEnabled, pausedAt == nil else { return }
+        guard pausedAt == nil else { return }
         pausedAt = Date()
         captureTask?.cancel()
         captureTask = nil
     }
 
     func resume() {
-        guard isEnabled, let pausedAt else { return }
+        guard let pausedAt else { return }
         accumulatedPause += Date().timeIntervalSince(pausedAt)
         self.pausedAt = nil
+        // Only start capturing again if the user actually has screenshots on.
+        guard isEnabled else { return }
         launchLoop()
     }
 
@@ -152,7 +166,9 @@ final class ScreenshotCapture {
         captureTask = nil
         task?.cancel()
         await task?.value
-        pausedAt = nil
+        // The clock is left exactly as it is. Clearing `pausedAt` here would either
+        // inflate the reported duration when a recording is stopped while paused, or
+        // lose the open pause when the user switches screenshots off during one.
     }
 
     private func launchLoop() {
