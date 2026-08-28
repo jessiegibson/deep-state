@@ -57,6 +57,40 @@ class MeetingManager {
             }
         }
     }
+    /// Whether to capture interval screenshots. Same hand-written shape as
+    /// `shouldRecordCamera` above — `@Observable` leaves no room for a `didSet`.
+    @ObservationIgnored
+    private var _screenshotsEnabled: Bool = UserDefaults.standard.bool(forKey: "pref_screenshots_enabled")
+
+    var screenshotsEnabled: Bool {
+        get {
+            access(keyPath: \.screenshotsEnabled)
+            return _screenshotsEnabled
+        }
+        set {
+            withMutation(keyPath: \.screenshotsEnabled) {
+                _screenshotsEnabled = newValue
+                UserDefaults.standard.set(newValue, forKey: "pref_screenshots_enabled")
+            }
+        }
+    }
+
+    @ObservationIgnored
+    private var _screenshotInterval: ScreenshotInterval = .loadPreference()
+
+    var screenshotInterval: ScreenshotInterval {
+        get {
+            access(keyPath: \.screenshotInterval)
+            return _screenshotInterval
+        }
+        set {
+            withMutation(keyPath: \.screenshotInterval) {
+                _screenshotInterval = newValue
+                newValue.savePreference()
+            }
+        }
+    }
+
     var shouldRecordSystemAudio: Bool = true
     /// Whether to capture the mic alongside a screen recording. See
     /// `startMicrophoneAlongsideScreen()` — this is a separate `AVAudioEngine` tap,
@@ -108,6 +142,26 @@ class MeetingManager {
     private var recordingSegments: [URL] = []
     private var segmentCounter = 0
 
+    // MARK: - Screenshots
+
+    @ObservationIgnored private let screenshotCapture = ScreenshotCapture()
+    @ObservationIgnored private let frameExtractor = VideoFrameExtractor()
+    @ObservationIgnored private var recordingStartedAt: Date?
+
+    /// Frames captured so far in this recording.
+    private(set) var screenshotCount = 0
+
+    /// Non-fatal screenshot trouble, kept off the main `status` channel on purpose: a
+    /// failed screenshot must never make an otherwise healthy recording read as failed.
+    private(set) var screenshotNote: String?
+
+    /// True when the screenshot note is a permission problem the user can act on, so
+    /// the UI can offer a route into System Settings.
+    private(set) var screenshotNeedsPermission = false
+
+    var isExtractingFrames = false
+    var extractionProgress = ""
+
     init() {
         print("MeetingManager init started")
 
@@ -139,6 +193,21 @@ class MeetingManager {
                 self?.amplitudes = bars
             }
         }
+
+        // Screenshot capture: mirror its count and non-fatal notes into observable
+        // state. These never touch `status` — see `screenshotNote`.
+        screenshotCapture.onCountChanged = { [weak self] count in
+            self?.screenshotCount = count
+        }
+        screenshotCapture.onStatus = { [weak self] note in
+            self?.screenshotNote = note
+            if note == nil { self?.screenshotNeedsPermission = false }
+        }
+
+        frameExtractor.onProgress = { [weak self] text in self?.extractionProgress = text }
+        frameExtractor.onExtractingChanged = { [weak self] v in self?.isExtractingFrames = v }
+        frameExtractor.onStatus = { [weak self] v in self?.status = v }
+        frameExtractor.onLibraryChanged = { [weak self] in self?.loadLibrary() }
 
         // File import / retranscribe: inject audio transforms, surface progress.
         fileImportService.transcribe = { [weak self] url in
@@ -235,6 +304,7 @@ class MeetingManager {
         recordingSegments = []
         segmentCounter = 0
         isPaused = false
+        prepareScreenshots()
 
         meetingNotes = ""
         isNotesSheetOpen = true
@@ -251,6 +321,9 @@ class MeetingManager {
             try await screenRecorder.startCapture(to: url)
             startMicrophoneAlongsideScreen(permitted: micPermitted)
             isRecording = true
+            // After the stream and the mic are up, so no frame catches a permission
+            // prompt mid-air.
+            await startScreenshotsIfEnabled()
             // Never let a missing mic pass unnoticed — it's the difference between
             // recording the meeting and recording silence.
             status = .recording(mode: recordingMode, micNote: micStatusNote)
@@ -316,6 +389,10 @@ class MeetingManager {
 
         status = .progress("Stopping…")
         isPaused = false
+
+        // Before finalizeAndStop(), so no screenshot is mid-write while the stream is
+        // being torn down.
+        await screenshotCapture.stop()
 
         do {
             // Stop capture and wait for the recording output to finish writing the
@@ -431,6 +508,10 @@ class MeetingManager {
     func pauseRecording() async {
         guard isRecording, !isPaused else { return }
 
+        // Both modes: freeze the screenshot clock as well as the capture, so elapsed
+        // offsets keep matching the audio timeline, which excludes paused time too.
+        screenshotCapture.pause()
+
         if recordingMode == .audioOnly {
             audioRecorder.pause()
             amplitudes = Array(repeating: 0.1, count: 5)
@@ -448,6 +529,8 @@ class MeetingManager {
                 isPaused = true
                 status = .paused
             } catch {
+                // The recording is still running, so screenshots should be too.
+                screenshotCapture.resume()
                 status = .failure(.pauseFailed(error.localizedDescription))
             }
         }
@@ -459,6 +542,7 @@ class MeetingManager {
         if recordingMode == .audioOnly {
             do {
                 try audioRecorder.resume()
+                screenshotCapture.resume()
                 isPaused = false
                 status = .recording(mode: recordingMode, micNote: nil)
             } catch {
@@ -474,6 +558,7 @@ class MeetingManager {
                 screenRecorder.selectedDisplayID = selectedDisplayID
                 try await screenRecorder.startCapture(to: url)
                 if screenMicURL != nil { try audioRecorder.resume() }
+                screenshotCapture.resume()
                 isPaused = false
                 status = .recording(mode: recordingMode, micNote: micStatusNote)
             } catch {
@@ -659,6 +744,8 @@ class MeetingManager {
 
     // MARK: - Save Logic
     func saveTranscript(text: String, videoURL: URL? = nil, audioURL: URL? = nil) {
+        let screenshots = screenshotPayload()
+
         // `withScopedAccess` returns nil for exactly one reason — the security-scoped
         // bookmark refused to open — and rethrows anything `saveMeeting` throws. The
         // old code wrapped the whole thing in `try?`, which collapsed both into nil
@@ -673,7 +760,8 @@ class MeetingManager {
                     title: self.meetingTitle,
                     notes: self.meetingNotes,
                     audioURL: audioURL,
-                    videoURL: videoURL
+                    videoURL: videoURL,
+                    screenshots: screenshots
                 )
             }
 
@@ -710,6 +798,8 @@ class MeetingManager {
             return
         }
 
+        prepareScreenshots()
+
         do {
             let wavURL = try audioRecorder.start()
             self.audioOnlyURL = wavURL
@@ -718,6 +808,7 @@ class MeetingManager {
             meetingNotes = ""
             isNotesSheetOpen = true
             status = .recording(mode: recordingMode, micNote: nil)
+            await startScreenshotsIfEnabled()
         } catch {
             status = .failure(.captureStartFailed(error.localizedDescription))
             print("Audio-only start error: \(error)")
@@ -727,6 +818,7 @@ class MeetingManager {
     private func stopAudioOnly() async {
         status = .progress("Stopping…")
 
+        await screenshotCapture.stop()
         audioRecorder.stop()
         isRecording = false
         isPaused = false
@@ -799,6 +891,125 @@ extension MeetingManager {
     func stopMonitoring() {
         ambientMonitor.stop()
         amplitudes = Array(repeating: 0.1, count: 5)
+    }
+}
+
+// MARK: - Screenshots
+
+extension MeetingManager {
+
+    /// Clears any frames left over from a previous session. Called at the start of
+    /// every recording whether or not screenshots are on, so a stale staged frame can
+    /// never be filed into this meeting's folder.
+    func prepareScreenshots() {
+        recordingStartedAt = Date()
+        screenshotNote = nil
+        screenshotNeedsPermission = false
+        screenshotCapture.reset()
+    }
+
+    /// Begins interval capture if the user has screenshots switched on.
+    func startScreenshotsIfEnabled() async {
+        guard screenshotsEnabled else { return }
+        await beginScreenshotCapture()
+    }
+
+    /// The mid-recording toggle.
+    ///
+    /// While idle this only flips the preference. During a recording it starts or
+    /// stops capture immediately — the point of the feature is that a user who did not
+    /// expect the screen to matter can decide otherwise halfway through an audio-only
+    /// recording.
+    func toggleScreenshots() async {
+        guard isRecording else {
+            screenshotsEnabled.toggle()
+            return
+        }
+
+        if screenshotCapture.isEnabled {
+            // Frames already taken are deliberately kept: switching capture off is not
+            // a request to discard what was captured before the switch.
+            await screenshotCapture.stop()
+            screenshotsEnabled = false
+        } else {
+            screenshotsEnabled = true
+            await beginScreenshotCapture()
+        }
+    }
+
+    /// Resolves screen-recording access, then starts the capture loop.
+    ///
+    /// Audio-only recordings are the interesting case: a user who has only ever
+    /// recorded audio may never have granted screen access, and the request has to
+    /// happen here rather than at launch. Whatever the outcome, the recording carries
+    /// on — audio and transcript do not depend on this.
+    private func beginScreenshotCapture() async {
+        switch PermissionsService.screenRecordingStatus() {
+        case .granted:
+            break
+        case .notDetermined:
+            PermissionsService.requestScreenRecording()
+            // The first grant does not apply to the running process, so there is
+            // nothing to capture this session even if the user says yes.
+            screenshotNote = "Screen Recording permission requested — relaunch to capture screenshots."
+            screenshotNeedsPermission = true
+            return
+        case .denied:
+            screenshotNote = AppFailure.screenRecordingDenied.message
+            screenshotNeedsPermission = true
+            return
+        }
+
+        screenshotNote = nil
+        screenshotNeedsPermission = false
+        screenshotCapture.selectedDisplayID = selectedDisplayID
+        screenshotCapture.start(interval: screenshotInterval.seconds)
+    }
+
+    /// Bundles the staged frames and their manifest for `StorageManager`. Returns nil
+    /// when nothing was captured, so a recording without screenshots writes no
+    /// `screenshots/` folder and no manifest at all.
+    func screenshotPayload() -> StorageManager.ScreenshotPayload? {
+        let frames = screenshotCapture.frames
+        guard !frames.isEmpty else { return nil }
+
+        let started = recordingStartedAt ?? Date()
+        let title = meetingTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let manifest = ScreenshotManifest(
+            meeting: .init(
+                title: title.isEmpty ? nil : title,
+                startedAt: started,
+                durationSeconds: screenshotCapture.elapsed
+            ),
+            capture: .init(
+                source: .liveInterval,
+                intervalSeconds: screenshotInterval.seconds,
+                recordingMode: recordingMode == .audioOnly ? "audioOnly" : "screenAndAudio",
+                displayName: screenshotCapture.displayName,
+                displayWidth: screenshotCapture.displayWidth,
+                displayHeight: screenshotCapture.displayHeight,
+                deduplicated: true,
+                dedupeThreshold: ScreenshotDedup.defaultThreshold
+            ),
+            screenshots: frames.map { frame in
+                .init(file: "screenshots/\(frame.url.lastPathComponent)",
+                      index: frame.index,
+                      elapsedSeconds: frame.elapsed,
+                      capturedAt: frame.capturedAt,
+                      width: frame.width,
+                      height: frame.height,
+                      byteSize: frame.byteSize)
+            }
+        )
+
+        return StorageManager.ScreenshotPayload(files: frames.map(\.url), manifest: manifest)
+    }
+
+    /// Pulls stills out of an already-saved recording's `video.mov`. The Library
+    /// counterpart to live capture, for meetings recorded before this existed.
+    func extractScreenshots(record: MeetingRecord, interval: ScreenshotInterval) async {
+        await frameExtractor.extract(from: record, interval: interval, storage: storage)
     }
 }
 
