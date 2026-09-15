@@ -1,5 +1,5 @@
 import XCTest
-@testable import Deep_State_Meeting_Agent_MacOS
+@testable import Deep_State_Meeting_Agent
 
 final class TranscriptFormatterTests: XCTestCase {
 
