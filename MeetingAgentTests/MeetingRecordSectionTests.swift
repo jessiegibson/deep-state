@@ -1,5 +1,5 @@
 import XCTest
-@testable import Deep_State_Meeting_Agent_MacOS
+@testable import Deep_State_Meeting_Agent
 
 /// Covers the transcript.md section parsing that backs the transcript/notes/summary
 /// panes and their copy buttons. The layout under test is the one StorageManager

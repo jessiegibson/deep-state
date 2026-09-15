@@ -25,7 +25,16 @@ xcodebuild -project "deep state Meeting Agent.xcodeproj" -scheme "deep state Mee
 open "deep state Meeting Agent.xcodeproj"
 ```
 
-There are no tests in this project currently.
+The `MeetingAgentTests` target holds 15 XCTest cases. Run them with:
+
+```bash
+xcodebuild -project "Deep State Meeting Agent MacOS.xcodeproj" -scheme "deep state Meeting Agent" -configuration Debug test
+```
+
+Tests `@testable import Deep_State_Meeting_Agent` — that module name comes from the macOS
+target's `PRODUCT_NAME`, which is pinned to "Deep State Meeting Agent" on **both** configs.
+If `PRODUCT_NAME` is ever allowed to inherit `$(TARGET_NAME)` again, the Release module name
+changes and the imports silently stop matching. See REGRESSION_REGISTER.md.
 
 ## Architecture
 
@@ -95,7 +104,7 @@ There are no tests in this project currently.
 
 - macOS 14.0+ (ScreenCaptureKit requirement)
 - Xcode 15+ / Swift 5.0
-- Bundle IDs: macOS `com.soloai.deepState`, iOS `soloai.MeetingAgentiOS`
+- Bundle ID: `com.soloai.deepState` — **shared by both targets**. The macOS and iOS apps are a single App Store Connect record with two platforms (Universal Purchase), which requires an identical bundle ID on both. Do not give the targets separate IDs.
 - iCloud container: `iCloud.soloai.MeetingAgent` (shared by both targets; intentionally independent of the bundle IDs)
 - App Sandbox enabled with entitlements for: microphone, camera, calendar, file access, network
 
