@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Support — Deep State Meeting Agent</title>
+<meta name="description" content="Help and support for Deep State Meeting Agent, a private meeting recorder and transcriber for Mac, iPhone, and iPad.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap">
+    <p class="eyebrow">Deep State Meeting Agent</p>
+    <h1>Support</h1>
+    <p class="tagline">Record your meetings, transcribe them on your own device, and keep every file where you put it. Here's how to get help.</p>
+    <nav class="sitenav">
+      <a href="index.html" aria-current="page">Support</a>
+      <a href="privacy.html">Privacy Policy</a>
+      <a href="https://github.com/jessiegibson/deep-state/issues">Report a Bug</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <div class="card contact">
+    <h3>Contact us</h3>
+    <p>Questions, problems, feature requests, or anything about your data — email us and a human will reply.</p>
+    <p><a class="mail" href="mailto:YOUR_SUPPORT_EMAIL">YOUR_SUPPORT_EMAIL</a></p>
+    <p>We aim to reply within <strong>2 business days</strong>. If you're reporting a bug, it helps to include your macOS or iOS version, the app version (shown in the app footer), and what you were doing when it happened.</p>
+    <p>Prefer a public tracker? You can also <a href="https://github.com/jessiegibson/deep-state/issues">open an issue on GitHub</a>.</p>
+  </div>
+
+  <h2>What the app does</h2>
+  <p>Deep State Meeting Agent records meetings — audio on its own, or your screen and audio together on a Mac — and turns the audio into a written transcript. Transcription runs <strong>on your device</strong> using a local speech model. Your recordings are saved as ordinary files in a folder you choose, or in your own iCloud Drive.</p>
+  <p>There is no account to create, no server of ours to sign in to, and we never receive your recordings. See the <a href="privacy.html">Privacy Policy</a> for the full detail.</p>
+
+  <h2>System requirements</h2>
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr><th>Platform</th><th>Requirement</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Mac</td><td>macOS 15.6 or later. Screen recording requires macOS 14 or later.</td></tr>
+        <tr><td>iPhone / iPad</td><td>iOS or iPadOS 18.0 or later. Audio recording only — screen recording is a Mac feature.</td></tr>
+        <tr><td>Storage</td><td>Space for your recordings, plus a few hundred megabytes for the on-device transcription model.</td></tr>
+        <tr><td>Network</td><td>Needed once, to download the transcription model. Recording and transcribing work offline after that.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Getting started</h2>
+  <p>The first time you open the app it walks you through the permissions it needs and asks where to save your recordings. Each permission screen explains what the permission is for, then macOS or iOS asks you to approve it. You can decline any of them — the app will simply have less it can do.</p>
+
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr><th>Permission</th><th>What it's used for</th><th>If you decline</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Microphone</td><td>Recording meeting audio</td><td>The app can't record. This one is required.</td></tr>
+        <tr><td>Screen Recording <em>(Mac)</em></td><td>Capturing the screen you pick in Screen&nbsp;+&nbsp;Audio mode</td><td>Audio Only mode still works.</td></tr>
+        <tr><td>Speech Recognition</td><td>Showing a live transcript while you record</td><td>You still get a full transcript after recording ends.</td></tr>
+        <tr><td>Calendar</td><td>Naming recordings after the meeting on your calendar and suggesting speaker names from attendees</td><td>You name recordings yourself.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Common questions</h2>
+
+  <details>
+    <summary>Where are my recordings saved?</summary>
+    <div class="body">
+      <p>Wherever you chose during setup — either a folder on your device, or the app's iCloud Drive folder. Each recording becomes its own folder named with the date and time, containing:</p>
+      <ul>
+        <li><code>transcript.md</code> — the title, date, your notes, and the transcript</li>
+        <li><code>audio.m4a</code> — the recorded audio</li>
+        <li><code>video.mov</code> — the screen recording, if you used Screen&nbsp;+&nbsp;Audio mode</li>
+        <li><code>Summarization_transcript.md</code> — only if you generated an AI summary</li>
+      </ul>
+      <p>These are normal files. You can open, move, back up, or delete them in Finder or the Files app without going through the app at all.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>How do I change where recordings are saved?</summary>
+    <div class="body">
+      <p>Open <strong>Storage Settings</strong> in the app and switch between iCloud and a local folder, or pick a different folder. Changing the location affects new recordings — existing ones stay where they are, so move them yourself if you want everything in one place.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>I denied a permission by mistake. How do I turn it back on?</summary>
+    <div class="body">
+      <p>macOS and iOS remember your choice, and the app can't ask a second time. Change it in system settings:</p>
+      <p><strong>On a Mac:</strong> System Settings → Privacy &amp; Security, then pick Microphone, Screen &amp; System Audio Recording, Speech Recognition, or Calendars, and switch Deep State Meeting Agent on. Screen recording changes require quitting and reopening the app.</p>
+      <p><strong>On iPhone or iPad:</strong> Settings → Privacy &amp; Security, or scroll to Deep State Meeting Agent in the app list at the bottom of Settings.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>The first recording is stuck on preparing or transcribing</summary>
+    <div class="body">
+      <p>The first time you transcribe anything, the app downloads its speech model — a large file, and it only happens once. On a slow or intermittent connection this can time out. Connect to Wi-Fi and try again; the app will pick up where it left off.</p>
+      <p>After the model is on your device, transcription works with no network connection at all.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>My screen recording has no sound, or the wrong sound</summary>
+    <div class="body">
+      <p>Screen&nbsp;+&nbsp;Audio mode captures the audio playing on your Mac and your microphone as separate sources, then mixes them. If one is missing, check in the app that both are switched on before you start recording.</p>
+      <p>If you're on Bluetooth headphones, be aware that macOS switches audio modes when a microphone becomes active, which can change the recording quality mid-call. Wired headphones or your Mac's built-in microphone avoid this entirely.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>The transcript is empty or says it's unavailable</summary>
+    <div class="body">
+      <p>Your audio is still safe — the app saves the recording before it transcribes, so a transcription failure never costs you the recording. Open the recording in the library and run transcription again.</p>
+      <p>If it keeps failing, check that the audio file actually contains sound by playing it. Silent recordings usually mean the wrong input device was selected, or the microphone permission was revoked between recordings.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>My recordings aren't syncing between my Mac and my iPhone</summary>
+    <div class="body">
+      <p>Syncing only happens when both devices are set to iCloud storage in Storage Settings, signed in to the same Apple Account, with iCloud Drive turned on. Recordings saved to a local folder stay on that device by design.</p>
+      <p>Large video files can take a while to upload. Check that iCloud Drive isn't paused and that you have space in your iCloud account.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>What is the AI summary, and does it send my transcript somewhere?</summary>
+    <div class="body">
+      <p>It's optional and off unless you set it up. If you add your own API key for an AI provider, you can ask the app to summarize a transcript you choose. When you do, the <strong>text of that transcript</strong> is sent to the provider you picked — never your audio or video.</p>
+      <p>If you'd rather nothing leave your device, either don't configure a key, or choose the local Ollama option, which runs on your own machine. Full detail is in the <a href="privacy.html#ai">Privacy Policy</a>.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>How do I delete a recording, and does that delete your copy?</summary>
+    <div class="body">
+      <p>Delete the recording's folder in Finder or the Files app, or remove it from within the app. There is no copy of ours to delete — your recordings never reach us. See <a href="privacy.html">Privacy Policy</a>.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>Is it legal to record my meetings?</summary>
+    <div class="body">
+      <p>That depends on where you and the other participants are. Some places require every participant to consent before a conversation is recorded; others require only one. The app doesn't announce that recording is happening, so telling the people you're meeting with is on you.</p>
+      <p>We can't give legal advice — if you're unsure about the rules where you are, please check locally.</p>
+    </div>
+  </details>
+
+  <h2>Still stuck?</h2>
+  <div class="card contact">
+    <p>Email <a class="mail" href="mailto:YOUR_SUPPORT_EMAIL">YOUR_SUPPORT_EMAIL</a></p>
+    <p>Tell us what you were trying to do, what happened instead, and which device and app version you're on. We read every message.</p>
+  </div>
+
+  <footer>
+    <p><a href="privacy.html">Privacy Policy</a> · <a href="https://github.com/jessiegibson/deep-state">Source on GitHub</a> · <a href="https://github.com/jessiegibson/deep-state/issues">Report a bug</a></p>
+    <p>Deep State Meeting Agent is made by Solo AI. Not affiliated with Apple Inc.</p>
+  </footer>
+
+</main>
+
+</body>
+</html>
