@@ -3,10 +3,13 @@ import Foundation
 import WhisperKit
 import Speech
 
-/// Post-hoc, file-based transcription: WhisperKit first, Apple Speech (on-device
-/// Neural Engine) as fallback. Extracted from `MeetingManager`. Holds the WhisperKit
-/// instance alive so the model is loaded only once. Uses its own `SFSpeechRecognizer`
-/// for the URL-based fallback, kept separate from live transcription.
+/// Post-hoc, file-based transcription: WhisperKit first, Apple's on-device speech
+/// stack as fallback. Extracted from `MeetingManager`. Holds the WhisperKit instance
+/// alive so the model is loaded only once.
+///
+/// The fallback picks an engine by OS version: `SpeechAnalyzer`/`SpeechTranscriber`
+/// on macOS 26+, `SFSpeechRecognizer` below it. The deployment target is 15.6, so
+/// both have to exist; `SFSpeechRecognizer` goes away when the target reaches 26.
 @MainActor
 final class WhisperTranscriber {
     private var whisper: WhisperKit?
@@ -21,8 +24,10 @@ final class WhisperTranscriber {
     func load() async -> String? {
         do {
             // Load WhisperKit once at startup (this can take a few seconds).
-            // Note: ensure the model variant matches the Mac's RAM.
-            let modelName = "openai_whisper-small"
+            // The variant comes from WhisperModelPreference rather than being
+            // hardcoded here, so the planned Settings picker has one place to write
+            // to and low-RAM Macs are not stuck with whatever this line said.
+            let modelName = WhisperModelPreference.selected.rawValue
             let candidatePath = Bundle.main.resourceURL?
                 .appendingPathComponent(modelName)
                 .path()
@@ -75,7 +80,7 @@ final class WhisperTranscriber {
             print("WhisperKit not loaded, using Apple Speech fallback...")
         }
 
-        // Fallback: Apple Speech with on-device Neural Engine
+        // Fallback: Apple's on-device speech stack.
         onStatus?("Transcribing with Apple Speech (fallback)...")
         if let appleSpeechResult = await transcribeWithAppleSpeech(audioURL: audioURL) {
             return appleSpeechResult
@@ -90,8 +95,28 @@ final class WhisperTranscriber {
         return "Transcription failed - both WhisperKit and Apple Speech unavailable"
     }
 
-    /// On-device Neural Engine transcription using Apple's SFSpeechURLRecognitionRequest.
+    /// Apple's on-device fallback, newest available engine first.
     private func transcribeWithAppleSpeech(audioURL: URL) async -> String? {
+        if #available(macOS 26.0, *) {
+            do {
+                if let text = try await SpeechAnalyzerTranscriber.transcribe(audioURL: audioURL) {
+                    print("SpeechAnalyzer transcription successful: \(text.count) characters")
+                    return text
+                }
+                // Nil here means "no speech" or "locale unsupported", not a fault.
+                // SFSpeechRecognizer is still worth a try before giving up.
+                print("SpeechAnalyzer returned no transcript, trying SFSpeechRecognizer...")
+            } catch {
+                print("SpeechAnalyzer error: \(error.localizedDescription), trying SFSpeechRecognizer...")
+            }
+        }
+
+        return await transcribeWithSFSpeechRecognizer(audioURL: audioURL)
+    }
+
+    /// Legacy on-device transcription via `SFSpeechURLRecognitionRequest`. Used below
+    /// macOS 26, and as a second chance when `SpeechAnalyzer` comes back empty.
+    private func transcribeWithSFSpeechRecognizer(audioURL: URL) async -> String? {
         guard let recognizer = speechRecognizer, recognizer.isAvailable else {
             print("Apple Speech recognizer not available")
             return nil

@@ -28,6 +28,21 @@ enum PermissionsService {
         }
     }
 
+    /// Contextual microphone gate, called at the moment recording starts rather than
+    /// at launch. Prompts only when TCC holds no record yet, then reports the settled
+    /// status so the caller can tell "user just refused" from "refused a while ago"
+    /// and word the message accordingly.
+    ///
+    /// Awaiting the request matters: firing `requestAccess` and reading the status on
+    /// the same turn always reads `.notDetermined`, which is what made the old
+    /// audio-only path show "Microphone access required" to a user who had just
+    /// tapped Allow.
+    static func ensureMicrophoneAccess() async -> PermissionStatus {
+        let status = microphoneStatus()
+        guard status == .notDetermined else { return status }
+        return await requestMicrophone() ? .granted : .denied
+    }
+
     // MARK: Screen Recording
 
     /// Set once we've called `CGRequestScreenCaptureAccess()`. Needed because TCC
@@ -90,29 +105,6 @@ enum PermissionsService {
                 continuation.resume(returning: status == .authorized)
             }
         }
-    }
-
-    /// Prompts for microphone and screen-recording access on startup.
-    /// Returns a status message if access is denied, otherwise nil.
-    @discardableResult
-    static func requestStartupPermissions() -> String? {
-        var message: String? = nil
-
-        switch AVCaptureDevice.authorizationStatus(for: .audio) {
-        case .notDetermined:
-            AVCaptureDevice.requestAccess(for: .audio) { _ in }
-        case .denied, .restricted:
-            message = "Microphone access denied. Enable in Settings."
-        default:
-            break
-        }
-
-        if #available(macOS 14.0, *), !CGPreflightScreenCaptureAccess(), !hasRequestedScreenRecording {
-            hasRequestedScreenRecording = true
-            CGRequestScreenCaptureAccess()
-        }
-
-        return message
     }
 }
 #endif
