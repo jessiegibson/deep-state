@@ -1,6 +1,6 @@
 import XCTest
 import CoreGraphics
-@testable import Deep_State_Meeting_Agent_MacOS
+@testable import Deep_State_Meeting_Agent
 
 /// Covers the near-identical-frame suppression that keeps a slide held for ten minutes
 /// from producing one JPEG per interval.
