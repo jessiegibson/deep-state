@@ -1,5 +1,5 @@
 import XCTest
-@testable import Deep_State_Meeting_Agent_MacOS
+@testable import Deep_State_Meeting_Agent
 
 /// Covers the `screenshots.json` wire format. This file is the contract other agents
 /// read, so the shape matters as much as the values: snake_case keys, ISO-8601 dates,
