@@ -2,7 +2,7 @@
 import SwiftUI
 
 struct OnboardingView: View {
-    @ObservedObject var manager: MeetingManager
+    var manager: MeetingManager
     /// Must be observed, not reached through `StorageManager.shared` at each use site.
     /// Reading the singleton directly registers no SwiftUI dependency, so `rootURL`
     /// changing after a folder pick never redraws this view and GET STARTED stays disabled.

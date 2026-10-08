@@ -12,8 +12,41 @@ struct MeetingRecord: Identifiable {
     let hasAudio: Bool
     let hasVideo: Bool
     let transcriptContent: String?
+    /// Number of files in the folder's `screenshots/` directory, 0 when there is none.
+    let screenshotCount: Int
+
+    /// Written out rather than synthesized so `screenshotCount` can default. A `let`
+    /// with an inline default is dropped from the memberwise initializer entirely,
+    /// which would break every existing call site.
+    init(folderURL: URL,
+         folderName: String,
+         title: String?,
+         date: Date,
+         hasAudio: Bool,
+         hasVideo: Bool,
+         transcriptContent: String?,
+         screenshotCount: Int = 0) {
+        self.folderURL = folderURL
+        self.folderName = folderName
+        self.title = title
+        self.date = date
+        self.hasAudio = hasAudio
+        self.hasVideo = hasVideo
+        self.transcriptContent = transcriptContent
+        self.screenshotCount = screenshotCount
+    }
 
     var displayTitle: String { title ?? folderName }
+
+    // MARK: - Screenshots
+
+    var hasScreenshots: Bool { screenshotCount > 0 }
+
+    var screenshotsFolderURL: URL { folderURL.appendingPathComponent("screenshots") }
+
+    /// The machine-readable index other agents read. Present only once a recording has
+    /// captured or extracted frames.
+    var screenshotManifestURL: URL { folderURL.appendingPathComponent("screenshots.json") }
 
     /// Resolves the actual audio file on disk (m4a is the normal path; wav is the
     /// fallback used when the on-device m4a conversion fails — see StorageManager).

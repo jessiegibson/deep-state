@@ -1,6 +1,5 @@
 #if os(macOS)
 import SwiftUI
-import Combine
 import EventKit
 
 enum AppView { case record, library }
@@ -8,7 +7,7 @@ enum AppView { case record, library }
 // MARK: - Content View
 
 struct ContentView: View {
-    @ObservedObject var manager: MeetingManager
+    var manager: MeetingManager
     @State private var activeView: AppView = .record
     @State private var isSettingsOpen = false
 
@@ -81,7 +80,10 @@ struct ContentView: View {
 // MARK: - Recording View
 
 struct RecordingView: View {
-    @ObservedObject var manager: MeetingManager
+    /// `@Bindable`, not a plain property: the notes panel binds
+    /// `$manager.meetingTitle` / `$manager.meetingNotes`, and `@Observable` types
+    /// get their `$` projection from `@Bindable` rather than `@ObservedObject`.
+    @Bindable var manager: MeetingManager
     @StateObject private var calendar = CalendarManager.shared
     @State private var isStorageSettingsOpen = false
 
@@ -193,6 +195,10 @@ struct RecordingView: View {
                 .opacity(manager.isRecording || manager.isImporting ? 0.5 : 1.0)
             }
 
+            // Screenshots — shown in both modes, unlike the screen picker: an
+            // audio-only recording is exactly the case this feature exists for.
+            screenshotsPanel
+
             // Save Location
             VStack(alignment: .leading, spacing: 4) {
                 Text("SAVE TO")
@@ -265,9 +271,9 @@ struct RecordingView: View {
             } else {
                 VStack {
                     Spacer()
-                    Text(manager.statusMessage.uppercased())
+                    Text(manager.status.message.uppercased())
                         .font(NBDesign.bodyFont)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(statusColor(manager.status.severity))
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
                     Spacer()
@@ -352,6 +358,87 @@ struct RecordingView: View {
                     .disabled(manager.isImporting)
                 }
                 Spacer()
+            }
+        }
+    }
+
+    // MARK: - Screenshots Panel
+
+    private var screenshotsPanel: some View {
+        VStack(alignment: .leading, spacing: NBDesign.smallPadding) {
+            HStack {
+                Text("SCREENSHOTS")
+                    .font(NBDesign.captionFont)
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                // Stays enabled while recording — flipping this mid-recording is the
+                // whole point of the feature.
+                Button(manager.screenshotsEnabled ? "ON" : "OFF") {
+                    Task { await manager.toggleScreenshots() }
+                }
+                .font(NBDesign.captionFont)
+                .foregroundStyle(manager.screenshotsEnabled ? NBDesign.background : NBDesign.foreground)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
+                .background(manager.screenshotsEnabled ? NBDesign.secondaryAccent : NBDesign.surface)
+                .overlay(Rectangle().stroke(NBDesign.border, lineWidth: NBDesign.thinBorder))
+                .buttonStyle(.plain)
+                .disabled(manager.isStopping || manager.isImporting)
+            }
+
+            HStack(spacing: 0) {
+                ForEach(ScreenshotInterval.allCases) { option in
+                    Button(option.label) {
+                        manager.screenshotInterval = option
+                    }
+                    .font(NBDesign.captionFont)
+                    .foregroundStyle(
+                        manager.screenshotInterval == option
+                            ? NBDesign.background
+                            : NBDesign.foreground
+                    )
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(
+                        manager.screenshotInterval == option
+                            ? NBDesign.foreground
+                            : NBDesign.surface
+                    )
+                    .overlay(Rectangle().stroke(NBDesign.border, lineWidth: NBDesign.thinBorder))
+                    .buttonStyle(.plain)
+                }
+            }
+            // The interval is fixed for the duration of a recording — changing it
+            // partway would make the manifest's stated interval a lie.
+            .disabled(manager.isRecording || manager.isImporting)
+            .opacity(manager.isRecording || manager.isImporting ? 0.5 : 1.0)
+
+            if manager.isRecording && manager.screenshotsEnabled {
+                Text("\(manager.screenshotCount) CAPTURED")
+                    .font(NBDesign.captionFont)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let note = manager.screenshotNote {
+                HStack(spacing: NBDesign.smallPadding) {
+                    Text(note.uppercased())
+                        .font(NBDesign.captionFont)
+                        .foregroundStyle(NBDesign.accent)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if manager.screenshotNeedsPermission {
+                        Button("OPEN SETTINGS") {
+                            PermissionsService.openScreenRecordingSettings()
+                        }
+                        .font(NBDesign.captionFont)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .overlay(Rectangle().stroke(NBDesign.border, lineWidth: NBDesign.thinBorder))
+                        .buttonStyle(.plain)
+                    }
+                }
             }
         }
     }
@@ -463,12 +550,24 @@ struct RecordingView: View {
             .overlay(Rectangle().stroke(NBDesign.border, lineWidth: NBDesign.thinBorder))
         }
     }
+
+    /// Status text colour by severity. A failure and a "Saved" must not read the
+    /// same — that was the practical cost of the old single-String status channel.
+    private func statusColor(_ severity: AppStatus.Severity) -> Color {
+        switch severity {
+        case .neutral: return .secondary
+        case .active:  return .secondary
+        case .success: return NBDesign.foreground
+        case .failure: return NBDesign.accent
+        }
+    }
+
 }
 
 // MARK: - Library View
 
 struct LibraryView: View {
-    @ObservedObject var manager: MeetingManager
+    var manager: MeetingManager
     @State private var selectedRecord: MeetingRecord? = nil
     @State private var isSelectionMode = false
     @State private var selectedFolderURLs: Set<String> = []
@@ -537,6 +636,19 @@ struct LibraryView: View {
                 .padding(.bottom, NBDesign.smallPadding)
             }
 
+            // Frame-extraction progress bar
+            if manager.isExtractingFrames {
+                HStack(spacing: NBDesign.smallPadding) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text(manager.extractionProgress.uppercased())
+                        .font(NBDesign.captionFont)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, NBDesign.padding)
+                .padding(.bottom, NBDesign.smallPadding)
+            }
+
             Rectangle()
                 .fill(NBDesign.border)
                 .frame(height: NBDesign.thinBorder)
@@ -576,10 +688,19 @@ struct LibraryView: View {
                                 MeetingRecordRow(
                                     record: record,
                                     isRetranscribing: manager.isRetranscribing,
+                                    isExtractingFrames: manager.isExtractingFrames,
                                     onViewTranscript: { selectedRecord = record },
                                     onOpen: { manager.openInFinder(record.folderURL) },
                                     onRetranscribe: {
                                         Task { await manager.retranscribe(record: record) }
+                                    },
+                                    onExtractFrames: {
+                                        Task {
+                                            await manager.extractScreenshots(
+                                                record: record,
+                                                interval: manager.screenshotInterval
+                                            )
+                                        }
                                     }
                                 )
                             }
@@ -604,9 +725,11 @@ struct LibraryView: View {
 struct MeetingRecordRow: View {
     let record: MeetingRecord
     let isRetranscribing: Bool
+    let isExtractingFrames: Bool
     let onViewTranscript: () -> Void
     let onOpen: () -> Void
     let onRetranscribe: () -> Void
+    let onExtractFrames: () -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: NBDesign.padding) {
@@ -619,6 +742,7 @@ struct MeetingRecordRow: View {
                 HStack(spacing: 4) {
                     if record.hasAudio { badge("AUDIO") }
                     if record.hasVideo { badge("VIDEO") }
+                    if record.hasScreenshots { badge("SHOTS \(record.screenshotCount)") }
                 }
             }
             Spacer()
@@ -633,6 +757,17 @@ struct MeetingRecordRow: View {
                         .overlay(Rectangle().stroke(NBDesign.border, lineWidth: NBDesign.thinBorder))
                         .buttonStyle(.plain)
                         .disabled(isRetranscribing || !record.hasAudio)
+                    // Only offered for a video the folder has no screenshots for —
+                    // extraction will not merge with or overwrite an existing set.
+                    if record.hasVideo && !record.hasScreenshots {
+                        Button(isExtractingFrames ? "..." : "EXTRACT FRAMES") { onExtractFrames() }
+                            .font(NBDesign.captionFont)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .overlay(Rectangle().stroke(NBDesign.border, lineWidth: NBDesign.thinBorder))
+                            .buttonStyle(.plain)
+                            .disabled(isExtractingFrames)
+                    }
                     Button("OPEN") { onOpen() }
                         .font(NBDesign.captionFont)
                         .padding(.horizontal, 8)
