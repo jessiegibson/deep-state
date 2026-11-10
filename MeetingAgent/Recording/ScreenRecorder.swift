@@ -31,6 +31,9 @@ struct DisplayOption: Identifiable, Equatable {
 final class ScreenRecorder: NSObject, SCStreamDelegate, SCRecordingOutputDelegate {
     /// Mirrors the user's "record system audio" preference; applied at capture start.
     var captureSystemAudio = false
+    /// When true the capture is used purely as a system-audio source (Audio Only
+    /// mode): the video track is shrunk to a throwaway thumbnail stream.
+    var audioOnlyCapture = false
     /// Display to record, chosen by the user. Falls back to the first available display
     /// when nil or when the id no longer matches a connected display.
     var selectedDisplayID: CGDirectDisplayID?
@@ -126,8 +129,19 @@ final class ScreenRecorder: NSObject, SCStreamDelegate, SCRecordingOutputDelegat
         let (filter, display) = try await Self.makeContentFilter(displayID: selectedDisplayID)
 
         let config = SCStreamConfiguration()
-        config.width = Int(display.width)
-        config.height = Int(display.height)
+        if audioOnlyCapture {
+            // The stream exists only for its system-audio track. ScreenCaptureKit has
+            // no audio-only recording output, so keep the video as cheap as possible:
+            // a thumbnail-sized frame at ~1 fps. (Not smaller — tiny dimensions risk
+            // an H.264 encoder rejection.) The MOV is discarded after extraction.
+            config.width = 320
+            config.height = 180
+            config.minimumFrameInterval = CMTime(value: 1, timescale: 1)
+            config.showsCursor = false
+        } else {
+            config.width = Int(display.width)
+            config.height = Int(display.height)
+        }
         config.capturesAudio = captureSystemAudio
         // Do NOT set config.captureMicrophone here — in a sandboxed app it makes
         // ScreenCaptureKit build an aggregated HAL virtual device (system audio + mic),
