@@ -35,6 +35,9 @@ Pods/
 # Carthage
 Carthage/Build/
 
+# GRA4HIFY OUTPUT
+graphify-out/
+
 # macOS
 .DS_Store
 .AppleDouble

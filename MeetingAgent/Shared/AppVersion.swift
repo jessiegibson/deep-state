@@ -33,16 +33,51 @@ enum AppVersion {
         return f.string(from: date)
     }()
 
-    /// e.g. `macOS v0.8 (20260625) · DEBUG`
+    /// TestFlight installs carry a sandbox receipt; App Store installs carry the
+    /// production one. This is how we tell a tester's copy from a customer's copy.
+    ///
+    /// `appStoreReceiptURL` is deprecated in favour of StoreKit's `AppTransaction`,
+    /// which is async and can hit the network on first call — far too much machinery
+    /// for a footer label. Deliberately kept. If it is ever removed this stops
+    /// compiling rather than misbehaving, and the fallback is the customer-facing
+    /// string, which is the safe direction to fail.
+    static let isTestFlight: Bool = {
+        Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt"
+    }()
+
+    /// Debug and TestFlight builds get the full diagnostic stamp. App Store builds
+    /// do not — a shipped app should not advertise its build configuration, its
+    /// compile time, or the platform it was built for.
+    static var isInternalBuild: Bool {
+        #if DEBUG
+        return true
+        #else
+        return isTestFlight
+        #endif
+    }
+
+    /// Full diagnostic stamp, e.g. `iOS v0.8 (20260922) · DEBUG · built Sep 22 12:25`
     static var displayString: String {
-        "\(platform) v\(short) (\(build)) · \(configuration) - built: \(buildDate)"
+        "\(platform) v\(short) (\(build)) · \(configuration) · built \(buildDate)"
+    }
+
+    /// What customers see, e.g. `v0.8 (20260922)` — enough for a support ticket,
+    /// nothing more.
+    static var releaseString: String {
+        "v\(short) (\(build))"
+    }
+
+    /// The string the footer renders, chosen by build channel.
+    static var footerString: String {
+        isInternalBuild ? displayString : releaseString
     }
 }
 
 // MARK: - Version Footer
 
-/// Thin build stamp pinned under a screen. Testing aid — the text is selectable
-/// so it can be pasted straight into a bug report.
+/// Thin build stamp pinned under a screen. In Debug and TestFlight it carries the
+/// full diagnostic string so a tester can paste it into a bug report; in an App
+/// Store build it narrows to `v<version> (<build>)`.
 struct VersionFooter: View {
     var body: some View {
         VStack(spacing: 0) {
@@ -50,7 +85,7 @@ struct VersionFooter: View {
                 .fill(NBDesign.border)
                 .frame(height: NBDesign.thinBorder)
 
-            Text(AppVersion.displayString)
+            Text(AppVersion.footerString)
                 .font(NBDesign.captionFont)
                 .foregroundStyle(.secondary)
                 .textSelection(.enabled)

@@ -35,6 +35,10 @@ class IOSMeetingManager: ObservableObject {
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private var rawSegments: [SFTranscriptionSegment] = []
+    private var interruptionObserver: NSObjectProtocol?
+    /// Distinguishes a system interruption from a pause the user asked for, so we
+    /// never auto-resume a recording they deliberately stopped.
+    private var wasInterrupted = false
 
     // MARK: - Init
 
@@ -134,6 +138,7 @@ class IOSMeetingManager: ObservableObject {
 
             engine.prepare()
             try engine.start()
+            beginObservingInterruptions()
 
             isRecording = true
             isPaused = false
@@ -175,6 +180,9 @@ class IOSMeetingManager: ObservableObject {
         recognitionRequest = nil
         recognitionTask = nil
         audioFile = nil
+        endObservingInterruptions()
+        try? AVAudioSession.sharedInstance()
+            .setActive(false, options: .notifyOthersOnDeactivation)
 
         isRecording = false
         isPaused = false
@@ -210,6 +218,73 @@ class IOSMeetingManager: ObservableObject {
         if m4aURL != wavURL { try? FileManager.default.removeItem(at: m4aURL) }
         loadLibrary()
         statusMessage = "Saved"
+    }
+
+    // MARK: - Interruptions
+
+    /// A phone call, a timer, or another app taking the microphone suspends the audio
+    /// engine. Without this the recording dies silently — and with background recording
+    /// enabled the phone is usually in a pocket, so nobody sees that it stopped.
+    private func beginObservingInterruptions() {
+        guard interruptionObserver == nil else { return }
+        interruptionObserver = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.interruptionNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: .main
+        ) { [weak self] note in
+            guard
+                let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+                let type = AVAudioSession.InterruptionType(rawValue: raw)
+            else { return }
+
+            let shouldResume = (note.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt)
+                .map { AVAudioSession.InterruptionOptions(rawValue: $0).contains(.shouldResume) }
+                ?? false
+
+            // Bind strongly out here: capturing the weak optional inside the Task is an
+            // error under the Swift 6 language mode.
+            guard let self else { return }
+            Task { @MainActor in
+                switch type {
+                case .began:
+                    self.interruptionDidBegin()
+                case .ended:
+                    if shouldResume { self.interruptionDidEnd() }
+                @unknown default:
+                    break
+                }
+            }
+        }
+    }
+
+    private func endObservingInterruptions() {
+        if let interruptionObserver {
+            NotificationCenter.default.removeObserver(interruptionObserver)
+        }
+        interruptionObserver = nil
+        wasInterrupted = false
+    }
+
+    private func interruptionDidBegin() {
+        guard isRecording, !isPaused else { return }
+        audioEngine?.pause()
+        isPaused = true
+        wasInterrupted = true
+        statusMessage = "Paused - interrupted"
+        amplitudes = Array(repeating: 0.1, count: 5)
+    }
+
+    private func interruptionDidEnd() {
+        guard isRecording, isPaused, wasInterrupted else { return }
+        wasInterrupted = false
+        do {
+            try AVAudioSession.sharedInstance().setActive(true)
+            try audioEngine?.start()
+            isPaused = false
+            statusMessage = "Recording..."
+        } catch {
+            statusMessage = "Could not resume: \(error.localizedDescription)"
+        }
     }
 
     // MARK: - Transcription

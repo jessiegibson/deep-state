@@ -43,11 +43,21 @@
 			);
 			target = 11FE81422F23393D00D6AE57 /* Deep State Meeting Agent Desktop */;
 		};
+		11D292FF2F64DE3B00B76594 /* Exceptions for "deep-state" folder in "Deep State Meeting Agent Mobile" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 11D292EB2F64DE3B00B76594 /* Deep State Meeting Agent Mobile */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		11D292ED2F64DE3B00B76594 /* deep-state */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				11D292FF2F64DE3B00B76594 /* Exceptions for "deep-state" folder in "Deep State Meeting Agent Mobile" target */,
+			);
 			path = "deep-state";
 			sourceTree = "<group>";
 		};
@@ -114,8 +124,8 @@
 			isa = PBXGroup;
 			children = (
 				574A487EF53B10F0B5B41EC6 /* MeetingAgentTests.xctest */,
-				1172AB1A303E26FD0045E4A7 /* Deep State Meeting Agent.app */,
 				119B0A2A30597C2E00FAE159 /* Deep State Meeting Agent Mobile.app */,
+				1172AB1A303E26FD0045E4A7 /* Deep State Meeting Agent.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -314,12 +324,14 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "deep-state/deep-state.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20260625;
+				CURRENT_PROJECT_VERSION = 20260922;
 				DEVELOPMENT_TEAM = 472CR4BT3B;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "deep-state/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Deep State Meeting Agent";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Meeting Agent needs microphone access to record audio.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Meeting Agent uses speech recognition for live transcription.";
@@ -358,12 +370,14 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "deep-state/deep-state.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20260625;
+				CURRENT_PROJECT_VERSION = 20260922;
 				DEVELOPMENT_TEAM = 472CR4BT3B;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "deep-state/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Deep State Meeting Agent";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Meeting Agent needs microphone access to record audio.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Meeting Agent uses speech recognition for live transcription.";
@@ -534,7 +548,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 20260625;
+				CURRENT_PROJECT_VERSION = 20260922;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = MeetingAgent/Assets.xcassets;
 				ENABLE_APP_SANDBOX = YES;
@@ -601,7 +615,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 20260625;
+				CURRENT_PROJECT_VERSION = 20260922;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = MeetingAgent/Assets.xcassets;
 				ENABLE_APP_SANDBOX = YES;

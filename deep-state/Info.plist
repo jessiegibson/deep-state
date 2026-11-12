@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Recording has to survive the screen locking or the user switching apps: a
+	     meeting recorder lives in a pocket. Without this key iOS suspends the app and
+	     the AVAudioEngine tap stops, silently truncating the recording.
+	     There is no INFOPLIST_KEY_ build setting for UIBackgroundModes — it only
+	     applies from a real plist merged via INFOPLIST_FILE, which is why this file
+	     exists. Mirrors MeetingAgent/Info.plist on the macOS side. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
+</dict>
+</plist>
