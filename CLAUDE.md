@@ -62,7 +62,7 @@ changes and the imports silently stop matching. See REGRESSION_REGISTER.md.
 
 **Recording flow**:
 1. `start()` → requests ScreenCaptureKit permission → captures display video + system audio to temp MOV file
-2. Audio-only: `startAudioOnly()` → `AVAudioEngine` tap → writes WAV + feeds `SFSpeechRecognizer` for live transcript + collects `SFVoiceAnalytics` per segment
+2. Audio-only: `startAudioOnly()` → (if CALL AUDIO is on and Screen Recording is permitted) a thumbnail-sized `SCStream` to a temp MOV for **system audio**, started before the mic → `AVAudioEngine` tap → writes mic WAV. On stop the two are mixed into `audio.m4a`; the MOV is discarded. Without the stream, Audio Only records the microphone alone and misses the far side of a call on headphones (REGRESSION_REGISTER.md L21)
 3. `stopAndTranscribe()` / `stopAudioOnly()` → stops capture → extracts/converts audio → transcribes with WhisperKit → runs speaker diarization → saves organized folder
 
 **Saved folder structure** (timestamp as folder name):

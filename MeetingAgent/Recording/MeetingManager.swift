@@ -131,6 +131,15 @@ class MeetingManager {
     /// a silent recording is never a surprise discovered after the meeting.
     private(set) var micStatusNote: String?
 
+    /// True while an Audio Only recording also has a ScreenCaptureKit stream running
+    /// to capture system audio (the other side of a call). See `startSystemAudioForAudioOnly()`.
+    private var audioOnlySystemCapture = false
+    /// Why system audio isn't being captured in Audio Only mode, when it isn't.
+    /// Rendered by the CALL AUDIO panel rather than folded into `status`: a missing
+    /// far side is a degraded recording, not a failed one — same treatment as
+    /// `screenshotNote`.
+    private(set) var systemAudioNote: String?
+
     // Voice Visualizer Properties
     var amplitudes: [CGFloat] = Array(repeating: 0.1, count: 5)
     private let ambientMonitor = AmbientLevelMonitor()
@@ -178,13 +187,27 @@ class MeetingManager {
         }
 
         // Screen-capture stream/recorder failures stop recording and report status.
+        // In Audio Only mode the stream is just the system-audio source: losing it
+        // must not end the recording, the mic keeps going.
         screenRecorder.onStreamStopped = { [weak self] error in
-            self?.status = .failure(.streamStopped(error.localizedDescription))
-            self?.isRecording = false
+            guard let self else { return }
+            // In Audio Only the stream exists purely to capture system audio, so
+            // losing it downgrades the recording to mic-only rather than ending it.
+            if self.audioOnlySystemCapture {
+                self.noteSystemAudioLost(error)
+                return
+            }
+            self.status = .failure(.streamStopped(error.localizedDescription))
+            self.isRecording = false
         }
         screenRecorder.onRecorderError = { [weak self] error in
-            self?.status = .failure(.recorderError(error.localizedDescription))
-            self?.isRecording = false
+            guard let self else { return }
+            if self.audioOnlySystemCapture {
+                self.noteSystemAudioLost(error)
+                return
+            }
+            self.status = .failure(.recorderError(error.localizedDescription))
+            self.isRecording = false
         }
 
         // Audio-only capture drives the visualizer.
@@ -317,6 +340,7 @@ class MeetingManager {
 
         do {
             screenRecorder.captureSystemAudio = shouldRecordSystemAudio
+            screenRecorder.audioOnlyCapture = false
             screenRecorder.selectedDisplayID = selectedDisplayID
             try await screenRecorder.startCapture(to: url)
             startMicrophoneAlongsideScreen(permitted: micPermitted)
@@ -513,6 +537,18 @@ class MeetingManager {
         screenshotCapture.pause()
 
         if recordingMode == .audioOnly {
+            if audioOnlySystemCapture {
+                // SCStream can't pause: finalize this segment, resume starts a new one.
+                do {
+                    try await screenRecorder.finalizeAndStop()
+                } catch {
+                    print("[MeetingManager] system audio segment failed on pause: \(error)")
+                }
+                if let url = lastRecordingURL {
+                    recordingSegments.append(url)
+                    lastRecordingURL = nil
+                }
+            }
             audioRecorder.pause()
             amplitudes = Array(repeating: 0.1, count: 5)
             isPaused = true
@@ -541,6 +577,11 @@ class MeetingManager {
 
         if recordingMode == .audioOnly {
             do {
+                // System capture first, then the mic engine (HAL ordering).
+                if audioOnlySystemCapture {
+                    segmentCounter += 1
+                    await startSystemAudioSegment()
+                }
                 try audioRecorder.resume()
                 screenshotCapture.resume()
                 isPaused = false
@@ -555,6 +596,7 @@ class MeetingManager {
             self.lastRecordingURL = url
             do {
                 screenRecorder.captureSystemAudio = shouldRecordSystemAudio
+                screenRecorder.audioOnlyCapture = false
                 screenRecorder.selectedDisplayID = selectedDisplayID
                 try await screenRecorder.startCapture(to: url)
                 if screenMicURL != nil { try audioRecorder.resume() }
@@ -800,36 +842,188 @@ class MeetingManager {
 
         prepareScreenshots()
 
+        // The mic alone only hears the other side of a call if it leaks out of the
+        // speakers — with headphones it hears nothing. So capture system audio too.
+        // Started *before* the mic engine: an audio engine that is already running
+        // makes ScreenCaptureKit compete as a HAL client (`_StartIO` error 35).
+        recordingSegments = []
+        segmentCounter = 0
+        lastRecordingURL = nil
+        systemAudioNote = nil
+        audioOnlySystemCapture = false
+        if shouldRecordSystemAudio {
+            await startSystemAudioForAudioOnly()
+        }
+
         do {
             let wavURL = try audioRecorder.start()
             self.audioOnlyURL = wavURL
 
             isRecording = true
+            isPaused = false
             meetingNotes = ""
             isNotesSheetOpen = true
             status = .recording(mode: recordingMode, micNote: nil)
             await startScreenshotsIfEnabled()
         } catch {
+            // The system-audio stream started before the mic, so a mic failure has to
+            // tear it down — otherwise a stream runs on with no recording behind it.
+            if audioOnlySystemCapture {
+                audioOnlySystemCapture = false
+                try? await screenRecorder.finalizeAndStop()
+                if let url = lastRecordingURL { try? FileManager.default.removeItem(at: url) }
+                lastRecordingURL = nil
+            }
             status = .failure(.captureStartFailed(error.localizedDescription))
             print("Audio-only start error: \(error)")
         }
     }
 
+    /// Status line while an Audio Only recording is running. Never lets missing
+    /// call audio pass unnoticed.
+    /// Starts the ScreenCaptureKit stream that supplies system audio for an Audio
+    /// Only recording. Failure is non-fatal — the mic recording goes ahead — but it
+    /// is never silent: `systemAudioNote` surfaces the reason in the UI.
+    private func startSystemAudioForAudioOnly() async {
+        guard CGPreflightScreenCaptureAccess() else {
+            systemAudioNote = "Screen Recording permission needed"
+            print("[MeetingManager] no screen-capture permission — mic only")
+            return
+        }
+        // Release the idle level meter's AVAudioRecorder before ScreenCaptureKit starts.
+        stopMonitoring()
+        audioOnlySystemCapture = await startSystemAudioSegment()
+    }
+
+    /// Starts one system-audio segment (`temp_sys_N.mov`). Pause/resume creates a new
+    /// segment each time, same as screen recording.
+    @discardableResult
+    private func startSystemAudioSegment() async -> Bool {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("temp_sys_\(segmentCounter).mov")
+        do {
+            screenRecorder.captureSystemAudio = true
+            screenRecorder.audioOnlyCapture = true
+            screenRecorder.selectedDisplayID = selectedDisplayID
+            try await screenRecorder.startCapture(to: url)
+            lastRecordingURL = url
+            systemAudioNote = nil
+            return true
+        } catch {
+            lastRecordingURL = nil
+            systemAudioNote = error.localizedDescription
+            print("[MeetingManager] system audio capture unavailable: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    /// The system-audio stream died mid-recording. Keep the mic going and say so.
+    private func noteSystemAudioLost(_ error: Error) {
+        systemAudioNote = error.localizedDescription
+        print("[MeetingManager] system audio capture lost: \(error)")
+        // No status write: `systemAudioNote` is observed, so the CALL AUDIO panel
+        // updates on its own, and the recording itself has not failed.
+    }
+
+    /// Stops the Audio Only system-audio stream and returns its audio as an M4A, or
+    /// nil if there is none. Never throws: any failure here just means the recording
+    /// falls back to the mic.
+    private func finishSystemAudioCapture() async -> URL? {
+        guard audioOnlySystemCapture else { return nil }
+        audioOnlySystemCapture = false
+
+        do {
+            // Wait for the MOV to be finalized before reading it.
+            try await screenRecorder.finalizeAndStop()
+        } catch {
+            print("[MeetingManager] system audio finalization failed: \(error)")
+        }
+        if let url = lastRecordingURL {
+            recordingSegments.append(url)
+            lastRecordingURL = nil
+        }
+
+        let segments = recordingSegments.filter { url in
+            let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)
+            return ((attrs?[.size] as? NSNumber)?.intValue ?? 0) > 0
+        }
+        defer {
+            for url in recordingSegments { try? FileManager.default.removeItem(at: url) }
+            recordingSegments = []
+        }
+        guard !segments.isEmpty else {
+            systemAudioNote = systemAudioNote ?? "nothing was captured"
+            return nil
+        }
+
+        do {
+            let movURL = segments.count > 1
+                ? try await screenRecorder.mergeSegments(segments)
+                : segments[0]
+            defer { if segments.count > 1 { try? FileManager.default.removeItem(at: movURL) } }
+            guard let audioURL = try await extractAudio(from: movURL) else {
+                systemAudioNote = systemAudioNote ?? "no audio in the capture"
+                return nil
+            }
+            return audioURL
+        } catch {
+            systemAudioNote = error.localizedDescription
+            print("[MeetingManager] system audio extraction failed: \(error)")
+            return nil
+        }
+    }
+
     private func stopAudioOnly() async {
+        // Re-entrancy guard, same reason as the screen path (REGRESSION_REGISTER L5b):
+        // a second STOP while finalization is in flight races the same stream.
+        guard !isStopping else { return }
+        isStopping = true
+        defer { isStopping = false }
+
         status = .progress("Stopping…")
 
+        // Before finalizing the stream, so no screenshot is mid-write during teardown.
         await screenshotCapture.stop()
+
+        let systemAudioURL = await finishSystemAudioCapture()
         audioRecorder.stop()
         isRecording = false
         isPaused = false
         amplitudes = Array(repeating: 0.1, count: 5)
 
         guard let wavURL = audioRecorder.wavURL else {
+            if let systemAudioURL { try? FileManager.default.removeItem(at: systemAudioURL) }
             status = .failure(.noRecordingFound)
             return
         }
 
-        // Convert WAV to M4A for smaller file size
+        if let systemAudioURL {
+            // Two sources: system audio (from the capture) and the mic WAV.
+            status = .progress("Mixing audio…")
+            let micURL = micFileHasAudio(wavURL) ? wavURL : nil
+            let mixedURL = (try? await combineAudioSources(system: systemAudioURL, mic: micURL))
+                ?? systemAudioURL
+
+            status = .progress("Transcribing with AI…")
+            let transcriptText = await transcribeAudio(audioURL: mixedURL)
+
+            status = .progress("Saving files…")
+            saveTranscript(text: transcriptText, videoURL: nil, audioURL: mixedURL)
+
+            for url in [wavURL, systemAudioURL, mixedURL] {
+                try? FileManager.default.removeItem(at: url)
+            }
+            isNotesSheetOpen = false
+            loadLibrary()
+            // saveTranscript() reported the real outcome. Only annotate a success with
+            // the missing-call-audio note — never overwrite a save that actually failed.
+            if case .success(let saved) = status, let note = systemAudioNote {
+                status = .success("\(saved) — no call audio (\(note))")
+            }
+            return
+        }
+
+        // Mic only — convert WAV to M4A for smaller file size
         status = .progress("Converting audio…")
         let m4aURL: URL
         do {
@@ -864,6 +1058,11 @@ class MeetingManager {
 
         isNotesSheetOpen = false
         loadLibrary()
+        // saveTranscript() reported the real outcome. Only annotate a success with the
+        // missing-call-audio note — never overwrite a save that actually failed.
+        if case .success(let saved) = status, let note = systemAudioNote {
+            status = .success("\(saved) — no call audio (\(note))")
+        }
     }
 
     // MARK: - Permission Status (for Onboarding)

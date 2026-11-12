@@ -195,6 +195,56 @@ struct RecordingView: View {
                 .opacity(manager.isRecording || manager.isImporting ? 0.5 : 1.0)
             }
 
+            // Call audio (Audio Only): also record what plays through the Mac, so the
+            // other side of a call is captured even on headphones.
+            if manager.recordingMode == .audioOnly {
+                VStack(alignment: .leading, spacing: NBDesign.smallPadding) {
+                    Text("CALL AUDIO")
+                        .font(NBDesign.captionFont)
+                        .foregroundStyle(.secondary)
+
+                    Button(manager.shouldRecordSystemAudio ? "INCLUDED" : "MIC ONLY") {
+                        manager.shouldRecordSystemAudio.toggle()
+                    }
+                    .font(NBDesign.captionFont)
+                    .foregroundStyle(
+                        manager.shouldRecordSystemAudio
+                            ? NBDesign.background
+                            : NBDesign.foreground
+                    )
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(
+                        manager.shouldRecordSystemAudio
+                            ? NBDesign.foreground
+                            : NBDesign.surface
+                    )
+                    .overlay(
+                        Rectangle()
+                            .stroke(NBDesign.border, lineWidth: NBDesign.thinBorder)
+                    )
+
+                    if manager.shouldRecordSystemAudio
+                        && manager.screenRecordingPermissionStatus() != .granted {
+                        Text("NEEDS SCREEN RECORDING PERMISSION — WITHOUT IT ONLY YOUR MIC IS RECORDED")
+                            .font(NBDesign.captionFont)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                // Only the control is locked mid-recording. The note below stays at
+                // full strength: it appears when the far side has stopped being
+                // captured, which is precisely when it must not be greyed out.
+                .disabled(manager.isRecording || manager.isImporting)
+                .opacity(manager.isRecording || manager.isImporting ? 0.5 : 1.0)
+
+                if let note = manager.systemAudioNote {
+                    Text("NO CALL AUDIO — \(note)".uppercased())
+                        .font(NBDesign.captionFont)
+                        .foregroundStyle(NBDesign.accent)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
             // Screenshots — shown in both modes, unlike the screen picker: an
             // audio-only recording is exactly the case this feature exists for.
             screenshotsPanel

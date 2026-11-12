@@ -666,6 +666,29 @@ tccutil reset All com.soloai.deepState
 
 ---
 
+### L21. Audio Only mode recorded the microphone only — FIXED 2026-11-09
+
+From its introduction (`a1f79bd`, 2026-02-24) Audio Only was a bare `AVAudioEngine` mic tap.
+Other call participants were recorded only when the mic picked them up from the speakers,
+so on headphones a Teams/Zoom call saved one side of the conversation.
+
+Audio Only now also runs a ScreenCaptureKit stream purely for system audio
+(`ScreenRecorder.audioOnlyCapture`: 320×180 at ~1 fps, MOV discarded after extraction) and
+mixes it with the mic via `combineAudioSources`. Rules that follow from this:
+
+- Audio Only now **depends on Screen Recording permission** for call audio. Without it the
+  recording continues mic-only and `systemAudioNote` says so in the status line — never silent.
+- Start the stream **before** `audioRecorder.start()` (HAL ordering, same as screen mode).
+- L5 and L9 apply to this path too: await `finalizeAndStop()` before reading the MOV, never
+  set `captureMicrophone`.
+- A stream failure in Audio Only must not end the recording — `onStreamStopped` /
+  `onRecorderError` branch on `audioOnlySystemCapture`.
+
+**Guard:** record in Audio Only on headphones while a video plays; the transcript must
+contain the video's speech.
+
+---
+
 ## Part 2 — Chronological changelog
 
 47 commits, 2026-01-27 → 2026-07-23. `▲` marks a commit that introduced a regression.
